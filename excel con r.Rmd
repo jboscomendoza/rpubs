@@ -1,0 +1,263 @@
+---
+title: "Importar hojas de cálculo de Excel a R con readxl"
+author: "Juan Bosco Mendoza Vega"
+date: "9 de julio de 2016"
+output:
+  html_document:
+    highlight: haddock
+    number_sections: yes
+    toc: yes
+  pdf_document:
+    highlight: haddock
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+---
+
+Uno de los formatos de documento más comunes en los que se almacenan datos es en hojas de cálculo, en particular, las creadas y compatibles con el programa **Excel**, parte de la *suite* de ofimática **Microsoft Office**.
+
+Por esta razón, resulta útil conocer cómo trabajar con este tipo de documentos en **R**.
+
+En este documento revisaremos como importar datos contenidos en hojas de cálculo de **Excel** usando el paquete `readxl` así como solucionar algunos problemas a los que nos enfretamos regularmente al realizar esta tarea.
+
+# Sobre `readxl`
+
+`readxl` es un paquete diseñado para hacer una sola tarea: importar hojas de **Excel** a R. Esto hace que sea un paquete ligero y eficiente, a cambio de no contar con funciones avanzadas.
+
+Este paquete funciona en **Windows**, **Linux** y **OSX**. A diferencia de otros paquetes diseñados para importar hojas de cálculo de **Excel** a **R**, `readxl` no necesita de la instalación de dependencias adicionales en el sistema operativo, tales como **Java** o **Perl**.
+
+`readxl` es compatible con hojas de cálculo de **Excel 97-03**, con extensión **.xls**, y con hojas de cálculo de las versiones más recientes de **Excel**, con extensión, **.xlsx**. Sin embargo, no es compatible con hojas de cálculo con extensión **.ods**, común en paquetería de oficina de código libre como **LibreOffice**.
+
+Si una celda de una pestaña contiene una fórmula, se importa es el resultado de esa formula. En general, lo que ves es lo que obtienes al importar una hoja de cálculo con `readxl`. Si deseas recuperar información contenida en fórmulas, tendrás que buscar otras alternativas.
+
+El propósito final de usar `readxl` es contar con **datos ordenados** (*tidy data*), esto es, que cada renglón represente una observación y cada columna representa una variable.  Cumplir con estas dos condiciones nos proporciona una estructura ideal  para realizar análisis estadísticos.
+
+#Preparación
+
+## Instalación de paquetes
+
+Instalamos `readxl` y `dplyr`.
+
+En este documento usaremos `dplyr` para facilitar algunas tareas. Específicamente usaremos el operador `%>%` (*pipe*), para escribir nuestro código. Este operador nos sirve para usar el resultado de la operación a su izquierda como argumento para la operación a su derecha. Así, en lugar de anidar operaciones, las escribimos de izquierda a derecha, lo cual es más fácil de leer para un ser humano.
+
+```{r, eval=FALSE}
+install.packages(c("readxl", "dplyr"))
+```
+
+Cargamos los paquetes.
+
+```{r, message=FALSE}
+library(readxl)
+library(dplyr)
+```
+
+Ahora, necesitamos un documento para trabajar.
+
+## Obtener el documento a usar - excel_prueba
+
+La hoja de cálculo de **Excel** que usaremos es **excel_prueba.xlsx**. 
+
+Puedes descargarla del siguiente enlace a tu espacio de trabajo.
+
+* [excel_prueba.xlsx](https://drive.google.com/open?id=0B5vY_A3KPmP5ZmFyaTBIYVlEanc)
+
+Ya con un documento con el cual trabajar, empecemos a importar datos.
+
+# Importar datos de una hoja de cálculo a R
+
+## ¿Qué pestañas contiene nuestra hoja de cálculo?
+
+Antes de empezar, necesitamos conocer el contenido de nuestra hoja de cálculo. Podemos usar la función `excel_sheets` para conocer qué pestañas contiene nuestra hoja de cálculo sin salir de **R**.
+
+```{r}
+excel_sheets("excel_prueba.xlsx")
+```
+
+Tenemos tres pestañas, "*iris*", "*women*" y "*airquality*". Estas corresponden a los conjuntos de datos del mismo nombre disponibles por defecto en **R**, con algunas modificaciones para fines de ilustrar el uso de `readxl`.
+
+Con este conocimiento en mente, procedemos a importar el contenido de las tres pestañas.
+
+## Primera pestaña - iris
+
+Usaremos la función `read_excel` indicando la ruta del documento que queremos importar a nuestro espacio de trabajo de **R**, sin parámetros adicionales. Asignaremos el resultado de esta función al objeto **excel_iris**.
+
+```{r}
+excel_iris <- read_excel("excel_prueba.xlsx")
+```
+
+Realizamos la exploración del objeto que tenemos. Veremos su estructura (`str`), un resumen de su contenido (`summary`), y sus primeros (`head`) y últimos (`tail`) renglones.
+
+```{r}
+excel_iris %>% str()
+excel_iris %>% summary()
+excel_iris %>% head()
+excel_iris %>% tail()
+```
+
+¡Estupendo! Todo indica que hemos importado correctamente la primera pestaña de nuestra hoja de cálculo, aunque por lo general, es raro encontrarnos con hojas de cálculo con una estructura ordenada como esta y que todo marche tan fácilmente.
+
+Aún tenemos que importar un par de pestañas por importar que ilustrarán lo anterior
+
+
+
+## Segunda pestaña - women
+
+Importaremos la segunda pestaña usando la misma función `read_excel`, asignando un valor al parámetro `sheet`. 
+
+Este parámetro nos permite determinar qué pestaña queremos importar. Podemos indicar la pestaña que deseemos con un número, en nuestro caso con tres pestañas, de la 1 a la 3; o podemos indicar la pestaña que deseamos con su nombre, 
+
+Importaremos la segunda pestaña usando su nombre, que conocimos al usar la función `excel_sheets`, y la asignamos al objeto **excel_women**.
+
+```{r}
+excel_women <- read_excel("excel_prueba.xlsx", sheet = "women")
+```
+
+Realizamos la misma exploración que la primera pestaña.
+
+```{r}
+str(excel_women)
+summary(excel_women)
+head(excel_women)
+tail(excel_women)
+```
+
+Al parecer, se han importado correctamente los datos, pero con un problema. Los nombres de las columnas no son los correctos. 
+
+Esto se debe a que las columnas de esta pestaña no tienen encabezado, entonces al importarla se toman como nombres de columna los valores del primer renglon.
+
+Podemos comprobar esto usando la función `names`.
+
+```{r}
+names(excel_women)
+```
+
+Existen dos soluciones a este problema.
+
+La primera, si **no conocemos los nombres** que deben tener las columnas, es usar el parámetro `col_names` con valor igual a `FALSE`. De este modo, a cada columna se le asignará como nombre de **X0** hasta **Xn**, donde n es el número de columnas que tengamos.
+
+```{r}
+read_excel("excel_prueba.xlsx", sheet = "women", col_names = FALSE)
+```
+
+La segunda, si **conocemos los nombres de las columnas**, es usar `col_names` con valor igual a un vector de texto con los nombres de las columnas. 
+
+En esta pestaña, la primera columna son estaturas y la segunda son pesos, así que usaremos la segunda solución y asignaremos su resultado al objeto **excel_woman**.
+
+```{r}
+excel_women <- 
+  read_excel(
+    "excel_prueba.xlsx", 
+    sheet = "women", 
+    col_names = c("estatura", "peso")
+    )
+
+excel_women %>% names
+```
+Si usamos de nuevo las funciones `str`, `summary`, `head` y `tail` comprobaremos que los datos se han importado correctamente a **R**.
+
+Ahora pasemos a la tercera pestaña, más complicada que las dos primeras
+
+## Tercera pestaña - airquality
+
+Intentemos abrir la tercera pestaña por su nombre y veamos sus primeros diez renglones usando `head` con el parámetro `n` igual a **10**. Como podras ver, podemos usar el operador `%>%` para realizar estas tareas en secuencia, sin necesidad de asignar ningún resultado a un objeto.
+
+```{r}
+read_excel(
+  "excel_prueba.xlsx", 
+  sheet = "airquality"
+  ) %>% 
+  head(n = 10)
+```
+
+El resultado no luce bien. 
+
+Veamos la estructura de lo que estamos importando.
+
+```{r}
+read_excel(
+  "excel_prueba.xlsx", 
+  sheet = "airquality"
+  ) %>% 
+  str()
+```
+
+Definitivamente algo anda mal. Si usas las funciones `str`, `summary` y `tail` podrás comprobar esto con mayor certeza.
+
+Si abrimos con **Excel** u otra aplicación similar la hoja de cálculo con la que estamos trabajando, nos daremos cuenta que la pestaña **airquality** tiene celdas combinadas, encabezados, espacio en blanco y otros elementos que no es necesario conservar al importar a **R**. 
+
+Esto es algo común al trabajar conn las hojas de cálculo, pues todos estos elementos suelen ser usados para mejorar la presentación de la información o para prepararla para imprimirla en papel. Desde luego, esto no representa un conjunto de datos ordenados, así que hay que hacer ajustes.
+
+Usaremos el parámetro `skip`con un valor igual a **3** para omitir la lectura de los tres primeros renglones, los cuales contienen títulos y subtítulos de la pestaña. De bnuevo usaremos `head` para ver sólo los diez primeros renglones de la pestaña.
+
+```{r}
+read_excel(
+  "excel_prueba.xlsx", 
+  sheet = "airquality",
+  skip = 3) %>%
+  head(10)
+```
+
+Luce mucho mejor, pero aún tenemos problemas a resolver.
+
+### Problemas
+1. En lugar de `NA` para indicar valores perdidos, se ha usado un guión (**-**). Esta es la razón por la que las columnas donde tenemos números han sido identificadas como si su contenido fuera texto.
+2. La columna fecha aparece con datos perdidos pero debería contener fechas.
+2. La primera columna contiene el número de renglón de las observaciones en esta hoja. Esto es redundante con el número de renglón que se ha asigna  al importar a **R**.
+3. Tenemos columnas con un nombre, pero sin contenido, puesto que originalmente era una enorme celda combinada.
+4. Algunas columnas tienen nombres mal escritos o incorrectos. Por ejemplo: *biento* en lugar de *viento*.
+
+Por fortuna, todos estos problemas tienen solución.
+
+### Soluciones
+
+1. Usaremos el parámetro `na` con un valor igual a ``-``. De esta manera, indicamos que los datos perdidos se han codificado con un guión.
+2. Asignaremos al parámetro `col_types` un vector de texto indicando el tipo de de datos que contiene cada columna. Podemos elegir entre los valores "numeric", "text", "date" o "blank", usando un valor para cada columna. De este modo, elegiremos "date" para la columna fecha y "numeric" para las demás.
+3. Si deseamos que una columna sea omitida al importar una hoja, le asignamos el valor `"blank"` a `col_types`. Esto es lo que haremos con la primera columna y las columnas sin datos.
+4. Asignaremos los nombres correctos de las columnas con `col_names`, como lo hicimos en la segunda pestaña. Usaremos `NA` como nombre de las columnas que omitiremos.
+
+### Resultado
+
+Combinamos las soluciones y vemos los primeros diez renglones de la tercera pestaña.
+
+```{r}
+read_excel(
+  "excel_prueba.xlsx", 
+  sheet = "airquality", 
+  skip = 4, 
+  na = "-",
+  col_types = c("blank", "blank", "numeric", "numeric", "numeric", "numeric", "blank", "date", "numeric", "numeric", "numeric", "blank"),
+  col_names = c(NA, NA, "ozono", "rad_solar", "viento", "temp", NA, "fecha", "dia", "año", "mes", NA)
+  ) %>% 
+  head(10)
+```
+
+¡Excelente! El resultado luce satisfactorio así que lo que asignaremos al objeto **excel_airquality** y veamos su estructura, resumen y últimas columnas.
+
+```{r}
+excel_airquality <- 
+  read_excel(
+  "excel_prueba.xlsx", 
+  sheet = "airquality", 
+  skip = 4, 
+  na = "-",
+  col_types = c("blank", "blank", "numeric", "numeric", "numeric", "numeric", "blank", "date", "numeric", "numeric", "numeric", "blank"),
+  col_names = c(NA, NA, "ozono", "rad_solar", "viento", "temp", NA, "fecha", "dia", "año", "mes", NA)
+  )
+
+excel_airquality %>% str()
+excel_airquality %>% summary()
+excel_airquality %>% tail()
+```
+
+Confirmamos que hemos importado correctamente la pestaña **airquality** a **R**.
+
+# Conclusión
+
+En este documento hemos revisamos cómo importar datos contenidos en hojas de cálculo de **Excel** a **R**, algunos problemas que se presentan al realizar esta tarea y cómo solucionarlos.
+
+Debido al uso generalizado de **Excel** y otros programas para trabajar con hojas de cálculo, las dificultades y comportamientos poco usuales en los documentos que intentemos importar a **R** son innumerables.
+
+Lo revisado en este documento, aunque no abarca todas las posibilidades, proporciona suficientes herramientas para trabajar con este tipo de documentos.
+
+Comentarios, correcciones y sugerencias son bienvenidas ([email](mailto:jboscomendoza@gmail.com)).
