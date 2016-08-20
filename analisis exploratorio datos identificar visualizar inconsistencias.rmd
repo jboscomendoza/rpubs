@@ -1,0 +1,391 @@
+---
+title: Análisis exploratorio de datos - Encontrar y visualizar inconsistencias en
+  los datos
+author: "Juan Bosco Mendoza Vega"
+date: "18 de agosto de 2016"
+output:
+  html_document:
+    fig_width: 9
+    highlight: haddock
+    toc: yes
+  word_document:
+    toc: yes
+---
+
+# Introducción
+
+El propósito original de este documento era comparar distintas formas de presentar la misma información, en particular, proporciones de un total. Para ello decidí usar los resultados de la prueba Excale (*Examen de Calidad y Logro Educativo*) de Tercero de Primaria de su aplicación 2014. Esta evaluación fue desarrollada por el INEE (*Instituto para la Evaluación de la Educación*), un organismo autónomo de México.
+
+Sin embargo, al tratar de extraer los datos que necesitaba para mi propósito original, me encontré con que estos no servirían para lo que tenía previsto, pues estos contienen inconsistencias considerables.
+
+Por lo tanto, decidí dedicar este documento a mostrar una manera para presentar estas inconsistencias. Trabajar con documentos que no son perfectos no es la excepción, al contrario, es la norma. 
+
+Considerando lo anterior, el propósito de este documento es mostrar algunas herramientas para entender la calidad de los datos con los que contamos, es decir, para realizar análisis exploratorios. Los cuales, como veremos, son de suma importancia.
+
+## Antes de continuar 
+ 
+Este documento asume que el lector tiene familiaridad con operaciones comunes en **R**, por lo tanto habrá algunas partes de él que no tengan una explicación detallada. Al final de este documento se presentan enlaces a documentos de referencia de los paquetes empleados, en los que se puede encontrar información y ayuda sobre su uso.
+
+# Paquetes necesarios
+
+Necesitamos los siguientes paquetes que llamaremos con `library`.
+
+* dplyr: Para transformar y manipular fácilmente nuestros datos. Además, por el operador `%>%`, que hace más fácil escribir y leer código.
+* tidyr: Un paquete diseñado para limpiar y ordenar datos.
+* readxl: Para leer documentos de Excel.
+* ggplot2: Una gramática para generar gráficos en **R**.
+
+Como nota curiosa, todos estos paquetes forman parte del llamado *tidyverse*, una colección de paquetes iniciada por Hadley Wickham que tienen como finalidad manipular datos en R de una forma más ordenada y lógica. [Conoce más dando click aquí](http://hadley.nz/).
+
+```{r, message = FALSE}
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(ggplot2)
+```
+
+# Preparación de los datos
+
+## Descargar archivo
+
+Descargaremos la hoja de cálculo de Excel que contiene los resultados de la prueba Excale de Español. Usaremos `download.file` con `mode = "wb"` para que el archivo sea descargado correctamente.
+
+```{r, eval = FALSE}
+download.file(
+    "http://www.inee.edu.mx/images/stories/2016/excale03-2014/Excale-03_2014_Resultados_Logro_Español.xlsx",
+    "Excale-03_2014_Resultados_Logro_Español.xlsx",
+    mode = "wb"
+    )
+```
+
+## Importar datos a R
+
+Este documento tiene 17 pestañas y cada una de ellas incluye una cantidad considerable de celdas con información que no es de nuestro interés. Para nuestros fines, importaremos el contenido de la hoja "2.9" (*Porcentaje de estudiantes por nivel de logro educativo en Español. Resultados por entidad y estrato escolar.*), seleccionando únicamente los renglones y columnas que contienen datos relevantes.
+
+Importamos los datos del archivo que hemos descargado a **estados_raw** usando `read_excel`, ajustando los parámetros `sheet` y `skip`. Los renglones y columnas serán seleccionados usando la notación con corchetes.
+
+¿Cómo sabemos qué renglones y columnas necesitamos? Pues, revisando manualmente el archivo descargado. Nada sofisticado en ello.
+
+```{r}
+estados_raw <-
+    read_excel(
+    "Excale-03_2014_Resultados_Logro_Español.xlsx",
+    sheet = "2.9",
+    skip = 4
+    )[1:180, c(1, 3:14)]
+```
+
+## Crear nuevas variables
+
+Asignamos nombres descriptivos a las columnas, de acuerdo a su contenido. Los datos que hemos importado corresponden a los resultados de los estudiantes por nivel de logro, por estado (**Est**) y por modalidad (**Tipo**, que se agregará más adelante). 
+
+De acuerdo a la puntuación que obtienen los estudiantes, son categorizados en uno de cuatro niveles de logro posibles, ordenados de menor a mayor puntuación: Por debajo del básico (**Dba**), Básico (**Bas**), Medio (**Med**), y Avanzado (**Avd**). 
+
+Cada columna representa el porcentaje de estudiantes en ese nivel, por lo tanto, *la suma de los cuatro debe ser igual a 100*.
+
+La columna **NBas** corresponde al porcentaje de estudiantes alcanzan por lo menos el nivel Básico (**Bas** + **Med** + **Adv**), y la columna **NMed** corresponde a los estudiantes que alcanzan al menos el nivel Medio (**Med** + **Adv**).
+
+Además, aunque no las usaremos, le daremos nombre a las columnas que contienen el error estándar de los porcentajes, todos con la terminación **EE**.
+```{r}
+names(estados_raw) <-
+    c("Estado", "Dba", "DbaEE", "Bas", "BasEE", "Med", "MedEE", "Avd", "AvdEE", "NBas", "NBasEE", "NMed", "NMedEE")
+```
+
+Eliminamos los renglones sin datos. Como sabemos que todos los renglones de la columna **Estado** deben incluir algún dato, removemos aquellos con valores perdidos (`NA`)
+
+```{r}
+estados_raw <-
+    estados_raw %>%
+    filter(!is.na(Estado))
+```
+
+## ¿Qué tenemos que limpiar?
+
+Las columnas que hemos importado contienen algunos datos seguidos de un asterisco (*). Esto indica una "* estimación cuyo coeficiente de variación excede al 20%, por lo que posiblemente esté sesgada*". También hay celdas cuyo contenido son dos asteriscos (**) lo cual indica que "*no hay suficientes datos en el estrato escolar y entidad correspondientes para reportarlos de manera individual*".
+
+La presencia de asteriscos en los datos tiene un efecto secundario. Todo el contenido de las columnas que los contienen es coercionado a datos de tipo texto.
+
+Como los dobles asteriscos indican un valor no reportado, es equivalente a tener una celda vacía. Un asterisco sencillo nos indica un posible sesgo en el dato reportado, pero para nuestros fines no es algo relevante.
+
+## Convertir datos de tipo texto a tipo numérico
+
+Eliminaremos estos asteriscos para poder manipular los datos en estas columnas como variables numéricas con `gsub`. 
+
+```{r}
+estados_raw <-
+    estados_raw %>%
+    lapply(function(x) gsub("(\\*)", "", x)) %>%
+    tbl_df()
+```
+
+Convertimos a numérico las columnas pertinentes.
+
+```{r}
+estados_raw[, -1] <- estados_raw[, -1] %>%
+    lapply(as.numeric)
+```
+
+Convertimos los valores perdidos (`NA`) a 0 usando `ifelse` para así facilitar las operaciones que realizaremos más adelane.
+
+```{r}
+estados_raw <-
+    estados_raw %>%
+    lapply(function (x) ifelse(is.na(x), 0, x)) %>%
+    tbl_df
+```
+
+## Agregar nuevas variables resumen
+
+Crearemos tres variables nuevas con el cálculo de: el porcentaje total de estudiantes (**Tot_Pct**), el porcentaje total de Estudiantes que alcanzan al menos el nivel Básico (**NBas_Pct**), y el porcentaje total de estudiantes que alcanzan al menos el nivel Medio (**NMed_Pct**).
+
+Este paso contiene varias transformaciones sucesivas.
+
+1. Incluimos la columna Tipo para los tipos de escuela con `mutate`.
+2. Quitamos los tipos de escuela de la columna Estado, en la misma llamada a `mutate`.
+3. Creamos el valor "*Estatal*" para la columna Tipo, indicando los totales estatales.
+4. Rellenamos la columna Est con `fill`.
+5. Creamos las columnas **Tot_Pct**, **NBas_Pct**, y **NMed_Pct** con `mutate`.
+6. Creamos las columnas **Total_Dif**, **NBas_Dif** y **NMed_Pct**, en la misma llamada a `mutate`.
+
+
+```{r}
+estados_pct <-
+    estados_raw %>%
+    mutate(
+        Tipo = Estado,
+        Estado = ifelse(Estado %in% c("Indígena", "Comunitario", "Rural público", "Urbano público", "Privado"), NA, Estado),
+        Tipo = ifelse(Tipo %in% Estado, "Estatal", Tipo)
+    ) %>%
+    tidyr::fill(Estado) %>%
+    mutate(
+        Tot_Pct = Dba + Bas + Med + Avd,
+        NBas_Pct = Bas + Med + Avd,
+        NMed_Pct = Med + Avd,
+        Tot_Dif = Tot_Pct - 100,
+        NBas_Dif = NBas_Pct - NBas,
+        NMed_Dif = NMed_Pct - NMed
+    )
+```
+
+## Convertir datos de tipo texto a tipo factor
+
+Finalmente convertimos la columna **Tipo** de tipo texto a factores ordenados con `ordered`, para facilitar su agrupación y representación en gráficas.
+
+```{r}
+estados_pct[["Tipo"]] <-
+    estados_pct[["Tipo"]] %>%
+    ordered(levels = c("Estatal", "Urbano público", "Rural público", "Indígena", "Comunitario", "Privado"))
+```
+
+# Visualizar nuestros datos
+
+Usaremos `ggplot2` para graficar nuestros hallazgos. La sintaxis de este paquete es un poco compleja, así que veremos sólo un vistazo de las partes que emplearemos.
+
+* ggplot: Es nuestra función para iniciar un gráfico. Le agregaremos capas usando el operador `+`.
+* aes: Indica qué columnas de nuestros datos se usarán. En nuestro caso, el eje X será Estado y el Y será Tot_Dif, NBas_Dif y NMed_Dif, dependiendo del gráfico.
+* geom_point: Agrega una capa de gráfico de puntos. Esta es nuestra capa principal.
+* geom_text: Agrega una capa con texto a la gráfica para mostrar los valores de nuestros datos.
+* scale_x_discrete: Llamamos esta capa para reordenar los nombres de los Estados y ajustar los márgenes internos de los gráficos.
+* scale_y_continuous: Para ajustar los márgenes de las gráficas.
+* geom_hline: Lo usamos para trazar una línea en 0 y con ello facilitar la lectura de los gráficos.
+* coord_flip: Intercambia el eje X con el Y, de modo que los estados estén en el eje Y y en el X los valores.
+* facet_grid: Crea un malla para contener múltiples gráficas.
+* theme_bw: Añade un tema visual, blanco y negro.
+* theme: Ajustes finos al tema visual, por ejemplo, para quitar la leyenda por ser redundante.
+* labs: Títulos para el gráfico y los ejes.
+
+```{r, fig.height= 18, fig.width= 9}
+estados_pct %>%
+    ggplot(aes(x = Estado, y = Tot_Dif, color = Tipo)) +
+    geom_point() +
+    geom_text(
+        size = 3,
+        vjust = -0.6,
+        aes(label =
+                paste(
+                    ifelse(
+                        Tot_Dif > 0,
+                        paste("+", round(Tot_Dif, 1)),
+                        round(Tot_Dif, 1)),
+                    "%")
+        )
+    ) +
+    scale_x_discrete(
+        expand = c(.05, 0), 
+        limits = estados_pct$Estado %>%
+            ordered %>%
+            levels %>%
+            rev) +
+    scale_y_continuous(
+        expand = c(0.08, 0)
+    ) +
+    coord_flip() +
+    facet_wrap(~Tipo, nrow = 3) +
+    geom_hline(
+        yintercept = 0,
+        color = "#777777") +
+    theme_bw() +
+    theme(
+        panel.border = element_rect(color = "#777777", fill = NA),
+        legend.position = "none") +
+    labs(
+        title = "Inconsistencias en el porcentaje total",
+        x = "Estado",
+        y = "Diferencia contra el 100%\n (Puntos porcentuales)"
+    )
+```
+
+Cambiamos los argumentos en `aes()` a **Est** y **NBas_Dif** para generar los siguientes gráficos.
+
+```{r, echo=FALSE, fig.height= 18, fig.width= 9}
+estados_pct %>%
+    ggplot(aes(Estado, NBas_Dif, color = Tipo)) +
+    geom_point() +
+    coord_flip() +
+    geom_text(
+        size = 3,
+        
+        vjust = -0.6,
+        aes(label =
+                paste(
+                    ifelse(
+                        NBas_Dif > 0,
+                        paste("+", round(NBas_Dif, 1)),
+                        round(NBas_Dif, 1)),
+                    "%")
+        )
+    ) +
+    scale_x_discrete(
+        expand = c(.05, 0), 
+        limits = estados_pct$Estado %>%
+            ordered %>%
+            levels %>%
+            rev) +
+    scale_y_continuous(
+        expand = c(0.08, 0)
+    ) +
+    facet_wrap(~Tipo, nrow = 3) +
+    geom_hline(
+        yintercept = 0,
+        color = "#777777") +
+    theme_bw() +
+    theme(
+        panel.border = element_rect(color = "#777777", fill = NA),
+        legend.position = "none") +
+    labs(
+        title = "Inconsistencias en el porcentaje\n de estudiantes que alcanzan al menos nivel Básico",
+        x = "Estado",
+        y = "Diferencia contra porcentaje reportado\n (Puntos porcentuales)"
+    )
+```
+
+Y una última gráfica, con **Est** y **NMed_Dif** como argumentos.
+
+```{r, echo=FALSE, fig.height= 18, fig.width= 9}
+estados_pct %>%
+    ggplot(aes(Estado, NMed_Dif, color = Tipo)) +
+    geom_point() +
+    coord_flip() +
+    geom_text(
+        size = 3,
+        vjust = -0.6,
+        aes(label =
+                paste(
+                    ifelse(
+                        NMed_Dif > 0,
+                        paste("+", round(NMed_Dif, 1)),
+                        round(NMed_Dif, 1)),
+                    "%")
+        )
+    ) +
+    scale_x_discrete(
+        expand = c(.05, 0), 
+        limits = estados_pct$Estado %>%
+            ordered %>%
+            levels %>%
+            rev) +
+    scale_y_continuous(
+        expand = c(0.08, 0)
+        ) +
+    facet_wrap(~Tipo, nrow = 3) +
+    geom_hline(
+        yintercept = 0,
+        color = "#777777") +
+    theme_bw() +
+    theme(
+        panel.border = element_rect(color = "#777777", fill = NA),
+        legend.position = "none") +
+    labs(
+        title = "Inconsistencias en el porcentaje\n de estudiantes que alcanzan al menos nivel Básico",
+        x = "Estado",
+        y = "Diferencia contra porcentaje reportado\n (Puntos porcentuales)"
+    )
+```
+
+Como se puede apreciar, la disparidad es considerable. 
+
+## Magnitud absoluta
+
+Calculamos cual fue en promedio la magnitud de las inconsistencias, agrupadas por **Tipo**.
+
+```{r}
+estados_pct %>% 
+    select(Tipo, ends_with("Dif")) %>% 
+    group_by(Tipo) %>% 
+    mutate_each(funs(abs)) %>% 
+    summarise_each(funs(media = mean)) %>% 
+    data.frame
+```
+
+Por último, graficamos lo anterior
+
+```{r}
+estados_pct %>% 
+    select(Tipo, ends_with("Dif")) %>% 
+    group_by(Tipo) %>% 
+    mutate_each(funs(abs)) %>% 
+    summarise_each(funs(media = mean)) %>% 
+    gather(Dif, Media, Tot_Dif_media:NMed_Dif_media) %>% 
+    ggplot(aes(Dif, Media, fill = Tipo)) +
+    geom_bar(
+        stat = "identity", 
+        position = "dodge"
+    ) +
+    geom_text(
+        aes(label = round(Media, 1)),
+        position = position_dodge(width=0.9), 
+        vjust = -0.25) +
+    scale_y_continuous(
+        breaks = c(0,0)
+    ) + 
+    theme_minimal() +
+    theme(legend.position = "top") +
+    labs(title = "Promedio de magnitud absoluta de las inconsistencias",
+         x = "Tipo de diferencia",
+         y = "Diferencia en puntos porcentuales"
+    ) 
+
+```
+
+# Conclusión
+
+Nos hemos encontrado con inconsistencias considerables, algunas de más de 100% de diferencia. Es difícil saber la razón por las que esto ha ocurrido, pues desconocemos la manera en la que se introdujeron los datos.
+
+Una razón posible es que introducir asteriscos en las celdas haya sido la causa de errores. Obtuvimos los datos de una hoja de cálculo de Excel y en este programa el asterisco además de ser un caracter de texto, es usado para indicar comodines en distintos contextos. 
+
+Esto es un recordatorio de lo problemático que puede tornarse mezclar tipos de datos y manejarlos como si pertenecieran al mismo tipo, en este caso, numéricos y de texto, manejados como si fueran todos numéricos.
+
+Independientemente de la razón por la que los datos que con los que hemos trabajado en este documento presentaron inconsistencias, hemos presentado algunas herramientas que pueden usarse para identificar irregularidades en nuestros datos.
+
+Esto es, herramientas de análisis exploratorio de los datos. Es común escuchar que el análisis exploratorio es algo simple o de menor importancia que desarrollar modelos estadísticos, sin embargo, como hemos visto, si no se tiene cuidado en la exploración de los datos, es imposible hacer gran cosas con ellos. En el caso que presentamos, ni siquiera podemos describir porcentajes.
+
+El análisis exploratorio de los datos, aunque suena a algo poco glamoroso, es de suma importancia para todo tipo de análisis estadístico.
+
+# Referencias
+
+* Código de este documento en Github.
+* [Página personal de Hadley Wickham](http://hadley.nz/) 
+* [Introduction to dplyr - Rstudio](https://cran.rstudio.com/web/packages/dplyr/vignettes/introduction.html)
+* [Data Processing with dplyr & tidyr - Brad Boehmke](https://rpubs.com/bradleyboehmke/data_wrangling)
+* [Documentación de ggplot2 - Hadley Wickham, Winston Chang, Rstudio](http://docs.ggplot2.org/)
+* [Importar hojas de cálculo de Excel a R con readxl - Juan Bosco Mendoza Vega](http://rpubs.com/jboscomendoza/importar_hojas_calculo_excel_r_readxl)
