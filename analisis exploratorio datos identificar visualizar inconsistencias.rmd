@@ -381,6 +381,8 @@ Esto es, herramientas de análisis exploratorio de los datos. Es común escuchar
 
 El análisis exploratorio de los datos, aunque suena a algo poco glamoroso, es de suma importancia para todo tipo de análisis estadístico.
 
+Comentarios, correcciones y sugerencias son bienvenidas ([email](mailto:jboscomendoza@gmail.com)).
+
 # Referencias
 
 * Código de este documento en Github.
