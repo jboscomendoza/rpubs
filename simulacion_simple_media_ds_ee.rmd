@@ -1,0 +1,65 @@
+```{r}
+simulacion_simple <- function(casos = 1000, incremento = 10, media = 100, ds = 15) {
+  varRandos <- #Vector de número aleatorios, representa el total de casos
+    rnorm(
+      n = casos,
+      mean = media,
+      sd = ds
+    )
+
+  varSeq <- # Vector de incrementos en la muestra que tomaremos mas adelante
+    seq(
+      from = 0,
+      to = casos,
+      by = incremento
+    )
+
+  varFrame <- data.frame(Count = NA, Media = NA, Ds = NA, Se = NA) # Creación de data.frame
+
+  for(i in 1:length(varSeq)){ # Loop para generar medias, sd y ee
+
+    varVector <- # Toma una muestra del vector varRandos
+      sample(
+        x = varRandos,
+        size = varSeq[i] # El tamaño de la muestra es igual un valor i en el vector incrementos
+      )
+
+    varFrame[i, "Count"] <- i*incremento # Columna con identificador para facilitar graficar, se multuplica por incremento para mostrar el tamaño de muestra al que corresponde
+    varFrame[i, "Media"] <- mean(varVector) # Columna con medias
+    varFrame[i, "Ds"] <- sd(varVector) # Columna con ds
+    varFrame[i, "Se"] <- sd(varVector) / sqrt(length(varVector)) # ee
+
+  }
+  par(mfrow=c(1,3)) # Parametro grafico. Multiples graficos en un renglon y tres columnas
+
+  plot(
+    varFrame[, "Count"], # Conteo es igual para siguientes
+    varFrame[, "Media"], # Valor de media
+    type = "n", # Oculta los puntos
+    xlab = "Conteo", # Titulos
+    ylab = "Valor de la media"
+    )
+  lines(varFrame[, "Count"], varFrame[, "Media"]) # Agrega un grafico de linea al grafico anterior
+  abline(h = media, col = "#4B0082") # Dibuja una linea en el valor de la media
+
+  plot(
+    varFrame[, "Count"],
+    varFrame[, "Ds"],
+    type = "n",
+    xlab = "Conteo",
+    ylab = "Valor de la Descviación estándar"
+  )
+  lines(varFrame[, "Count"], varFrame[, "Ds"])
+  abline(h = ds, col = "#4B0082")
+
+  plot(
+    varFrame[, "Count"],
+    varFrame[, "Se"],
+    type = "n",
+    xlab = "Conteo",
+    ylab = "Valor del Error estándar"
+  )
+  lines(varFrame[, "Count"], varFrame[, "Se"])
+
+}
+```
