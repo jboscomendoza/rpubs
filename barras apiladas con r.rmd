@@ -1,30 +1,61 @@
+---
+title: "Untitled"
+author: "Juan Bosco Mendoza Vega"
+date: "7 de septiembre de 2016"
+output: html_document
+---
+
+# Paquetes necesarios
+
+```{r}
 library(dplyr)
 library(tidyr)
 library(readxl)
 library(ggplot2)
+```
 
-download.file(url = "http://www.inee.edu.mx/images/stories/2016/planea/PLANEA_6prim_Resultados_de_Logro_LyC_20160125.xlsx", destfile = "PLANEA_6prim_Resultados_de_Logro_LyC_20160125.xlsx")
+# Archivo usado
 
+```{r}
+download.file(url = "http://www.inee.edu.mx/images/stories/2016/planea/PLANEA_6prim_Resultados_de_Logro_LyC_20160125.xlsx", destfile = "PLANEA_6prim_Resultados_de_Logro_LyC_20160125.xlsx", mode = "wb")
+```
+
+
+```{r}
 excel_sheets("PLANEA_6prim_Resultados_de_Logro_LyC_20160125.xlsx")
+```
 
+# Importar datos
+
+```{r}
 ent <-
   read_excel("PLANEA_6prim_Resultados_de_Logro_LyC_20160125.xlsx", sheet = "7", skip = 5, col_names = F) %>%
   select(ENT = X0, CAT = X1, N1 = X2, N2 = X6, N3 = X10, N4 = X14) %>%
   .[1:214,]
+```
 
+
+```{r}
 ent[3:6]<-
   lapply(
     ent[3:6], function(x) gsub("\\*", "", x) %>%
       as.numeric
     )
+```
 
+
+```{r}
 ent <-
   ent %>%
   filter(is.na(CAT)) %>%
   select(-CAT) %>%
   gather(key = NIVEL, value = PERC, N1:N4)
+```
 
-#----
+
+# Primer gráfico
+
+```{r}
 ent %>%
   ggplot(aes(ENT, PERC)) +
   geom_bar(aes(fill = NIVEL), stat = "identity", position = "dodge") +
@@ -32,20 +63,29 @@ ent %>%
   geom_text(aes(label = substr(ENT, 1, 3), vjust = 0, hjust = -.2)) +
   coord_flip() +
   facet_grid(. ~ NIVEL)
+```
 
+
+```{r}
 ent %>%
   ggplot(aes(ENT, PERC)) +
   geom_bar(aes(fill = NIVEL), stat = "identity") +
   geom_text(aes(label = PERC), vjust = -.2) +
   geom_text(aes(label = substr(ENT, 1, 3), vjust = -1.3)) +
   facet_grid(NIVEL~.)
+```
 
+
+```{r}
 ent %>%
   mutate(PERC = ifelse(NIVEL == "N1", PERC * -1, PERC)) %>%
   ggplot(aes(ENT, PERC, fill = NIVEL)) +
   geom_bar(stat = "identity") +
   coord_flip()
+```
 
+
+```{r}
 ggplot() +
   geom_bar(
     data = ent %>%
@@ -60,8 +100,11 @@ ggplot() +
     stat = "identity"
   ) +
   coord_flip()
+```
 
-#----
+# Gráfico completo
+
+```{r}
 ggplot() +
   geom_bar(
     data = ent %>%
@@ -115,8 +158,10 @@ ggplot() +
     name = "Nivel",
     labels = c("I", "II", "III", "IV")
     )
+```
 
 # ----
+```{r}
 ent %>%
   mutate(
     LOGRO = ifelse(NIVEL %in% "N1", "BAJO", "ALTO"),
@@ -135,8 +180,11 @@ ent %>%
     ) +
   coord_flip() +
   scale_x_discrete(limits = rev(levels(ordered(ent$ENT))))
+```
 
 #----
+
+```{r}
 ent %>%
   mutate(
     LOGRO = ifelse(NIVEL %in% c("N1", "N2"), "BAJO", "ALTO")
@@ -151,33 +199,54 @@ ent %>%
   geom_text(aes(ENT, POS, label = PERC)) +
   coord_flip() +
   scale_x_discrete(limits = rev(levels(ordered(ent$ENT))))
+```
 
 #----
+
+```{r}
 ent_nac <- read_excel("PLANEA_6prim_Resultados_de_Logro_LyC_20160125.xlsx", sheet = "3", skip = 5, col_names = F) %>% select(ENT = X0, CAT = X2, NV3 = X23) %>% .[1:8, ]
+```
 
+```{r}
 ent_nac$NV3 <- gsub("(\\*)", "", ent_nac$NV3) %>% as.numeric()
+```
 
+```{r}
 ent_nac[1,2] <- "GENERAL"
+```
 
+```{r}
 ent_nac$CAT[ent_nac$CAT == "Baja y Muy baja"] <- "BAJA"
 ent_nac$CAT[ent_nac$CAT == "Muy alta y Alta"] <- "ALTA"
+```
 
+```{r}
 ent_nac <- ent_nac %>% filter(CAT %in% c("GENERAL", "BAJA", "ALTA"))
+```
 
+```{r}
 ent_nac <-
   ent_nac %>%
   fill(ENT) %>%
   spread(CAT, NV3) %>%
   mutate(DIF = BAJA -ALTA)
+```
 
+
+```{r}
 ent <-
   bind_rows(
     ent_nac,
     ent
   )
+```
 
+```{r}
 rm(ent_nac)
+```
 
+
+```{r}
 ent %>%
   mutate(ROJO = ifelse(ENT == "Nacional", "SI", NA)) %>%
   ggplot(aes(DIF, GENERAL)) +
@@ -186,3 +255,4 @@ ent %>%
   scale_x_continuous(limits = c(0, 30), expand = c(0, 0)) +
   scale_y_continuous(limits = c(12, 30), expand = c(0,0)) +
   theme_bw()
+```
