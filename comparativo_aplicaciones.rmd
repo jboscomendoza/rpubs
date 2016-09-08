@@ -1,0 +1,32 @@
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+```{r}
+set.seed(42)
+data.frame(
+  periodo = c("2012", "2013", "2014", "2015"),
+  grupo = c("A", "B", "C", "D", "E"),
+  precio = rnorm(400, mean = 50, sd = 15)
+) %>% 
+  group_by(periodo, grupo) %>% 
+  summarise_each(funs(mean)) %>% 
+  spread(periodo, precio) %>% 
+  mutate(dif = `2015` - `2012`,
+    colores = ifelse(dif > 0, "Gana", "Pierde")) %>%
+  gather(periodo, precio, `2012`:`2015`) %>% 
+  ggplot(aes(periodo, precio, color = colores)) + 
+  geom_point() +
+  geom_line(aes(group = grupo)) +
+  geom_text(vjust = -0.5,
+    aes(
+    label = ifelse(
+      periodo %in% c("2012", "2015"), 
+      as.character(grupo), 
+      ""))
+  ) + 
+  scale_color_manual(values =  c("#00CED1", "#FF4500")) +
+  theme_minimal()
+```
