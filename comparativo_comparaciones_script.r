@@ -3,6 +3,7 @@ library(purrr)
 library(tidyr)
 library(readxl)
 library(ggplot2)
+library(viridis)
 
 download.file(url = "http://www.inee.edu.mx/images/stories/documentos_pdf/Bases_Datos/EXCALE06_2009/excale-06_2009_resultados_de_logro_espanol.xls", destfile = "esp_09.xls", mode = "wb")
 
@@ -47,40 +48,70 @@ esp_15 <-
     filter(!(X0 %in% c("Tipo de escuela", "Marginación", "Rural-Urbano", NA))) %>%
     rename("Estado" = X0, "esp_2015" = X2)
 
-comparativo <- 
-    full_join(mat_09, esp_09) %>% 
+comparativo <-
+    full_join(mat_09, esp_09) %>%
     full_join(
         full_join(mat_13, esp_13)
-    ) %>% 
+    ) %>%
     full_join(
         full_join(mat_15, esp_15)
     )
 
-comparativo <- 
-    map_at(comparativo, 2:7, as.numeric) %>% tbl_df %>% 
+comparativo <-
+    map_at(comparativo, 2:7, as.numeric) %>% tbl_df %>%
     mutate(
-        mat_dif = mat_2015 - mat_2009, 
+        mat_dif = mat_2015 - mat_2009,
         esp_dif = esp_2015 - esp_2009,
-        mat_status = ifelse(mat_dif > 0, "Gana", "Pierde"),
-        esp_status = ifelse(esp_dif > 0, "Gana", "Pierde")
+        mat_status = ifelse(mat_dif > 0, "Incremento", "Decremento"),
+        esp_status = ifelse(esp_dif > 0, "Incremento", "Decremento")
     )
 
-comparativo <- 
+comparativo <-
     comparativo %>%
     gather(asignatura, media, mat_2009:esp_2015) %>%
     separate(asignatura, c("asignatura", "aplicacion"))
 
-comparativo %>% filter(asignatura == "esp") %>% 
-    ggplot(aes(aplicacion, media, color = esp_status)) + geom_line(aes(group = Estado)) +
-    geom_text(aes(label = ifelse(aplicacion == 2009, Estado, ""), hjust = 1)) + 
+comparativo %>%
+    filter(asignatura == "esp") %>%
+    ggplot(aes(aplicacion, media, color = esp_status)) +
+    geom_line(aes(group = Estado)) +
+    geom_text(aes(label = ifelse(aplicacion == 2009, Estado, ""), hjust = 1)) +
     geom_text(aes(label = ifelse(aplicacion == 2015, Estado, ""), hjust = 0)) +
     scale_color_manual(values = c("#3355cc", "#ff5533")) +
     theme_minimal()
 
 
-comparativo %>% filter(asignatura == "mat") %>% 
-    ggplot(aes(aplicacion, media, color = mat_status)) + geom_line(aes(group = Estado)) +
-    geom_text(aes(label = ifelse(aplicacion == 2009, Estado, ""), hjust = 1)) + 
+comparativo %>%
+    filter(asignatura == "mat") %>%
+    ggplot(aes(aplicacion, media, color = mat_status)) +
+    geom_line(aes(group = Estado)) +
+    geom_text(aes(label = ifelse(aplicacion == 2009, Estado, ""), hjust = 1)) +
     geom_text(aes(label = ifelse(aplicacion == 2015, Estado, ""), hjust = 0)) +
     scale_color_manual(values = c("#3355cc", "#ff5533")) +
+    theme_minimal()
+
+comparativo %>%
+    arrange(desc(mat_dif)) %>%
+    distinct(Estado, .keep_all = T) %>%
+    transform(Estado = reorder(Estado, mat_dif)) %>%
+    na.omit() %>%
+    ggplot(aes(Estado, mat_dif, fill = mat_dif)) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = ifelse(mat_dif > 0, round(mat_dif, 1), "")), hjust = 0) +
+    geom_text(aes(label = ifelse(mat_dif < 0, round(mat_dif, 1), "")), hjust = 1) +
+    coord_flip() +
+    scale_fill_viridis() +
+    theme_minimal()
+
+comparativo %>%
+    arrange(desc(esp_dif)) %>%
+    distinct(Estado, .keep_all = T) %>%
+    transform(Estado = reorder(Estado, esp_dif)) %>%
+    na.omit() %>%
+    ggplot(aes(Estado, esp_dif, fill = esp_dif)) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = ifelse(esp_dif > 0, round(esp_dif, 1), "")), hjust = 0) +
+    geom_text(aes(label = ifelse(esp_dif < 0, round(esp_dif, 1), "")), hjust = 1) +
+    coord_flip() +
+    scale_fill_viridis() +
     theme_minimal()
