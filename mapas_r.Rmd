@@ -1,0 +1,213 @@
+---
+title: "Mapas con R"
+author: "Juan Bosco Mendoza Vega"
+date: "2 de noviembre de 2016"
+output: 
+  html_document: 
+    highlight: haddock
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Paquetes necesarios
+Usaremos: 
+
+* `readxl` lectura de hojas de cálculo de Excel
+* `dplyr` manipulación y transformación de  datos
+* `tidyr` limpieza de tablas de datos
+* `tmap` creación de mapas temáticos
+* `viridis` paleta de colores Viridis
+
+```{r, warning=FALSE}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(tmap)
+library(viridis)
+```
+
+## Archivos necesarios
+
+Descargamos dos hojas de cálculo de *Excel¨* que contienen los resultados de Planea 2015 de Sexto Primaria, para Matemáticas y Lenguaje y comunicación.
+
+```{r, eval=FALSE}
+download.file("http://www.inee.edu.mx/images/stories/2016/planea/resultados-agosto-2016/PLANEA_6prim_Resultados_de_Logro_LyC_20160713.xlsx",
+              destfile = "PLANEA_6prim_Resultados_de_Logro_LyC_20160713.xlsx",
+              mode = "wb")
+download.file("http://www.inee.edu.mx/images/stories/2016/planea/resultados-agosto-2016/PLANEA_6prim_Resultados_de_Logro_Mat_20160713.xlsx",
+              destfile = "PLANEA_6prim_Resultados_de_Logro_Mat_20160713.xlsx",
+              mode = "wb")
+```
+
+Además necesitamos los archivos con información geográfica de México. Podemos encontrar una carpeta zip cuyo contenido debemos extraer en nuestra carpeta de trabajo. 
+
+* http://www.arcgis.com/home/item.html?id=ac9041c51b5c49c683fbfec61dc03ba8
+
+El archivo obtenemos se llama *mexstrates.xip* y el archivo que usaremos es *mexstates.shp*, que .es un archivo de tipo *shapefile*.
+
+## Importar datos a R
+
+Importamos la información geográfica con la función `read_shape` de `tmap`.
+
+```{r}
+mex_shape <- read_shape("mexstates.shp")
+```
+
+Usaremos la función `read_excel` para importar los datos de las hojas de cálculo a R, como **data.frames**. En este proceso serán usadas distintas funciones del paquete `dplyr` para seleccionar y ordenar los datos de manera que podamos usarlos después en un mapa temático.
+
+Importaremos dos pestañas de la hoja de cálculo con resultados de Lectura y comunicación por separado y después las combinaremos.
+
+El resultado serán data.frames con una Entidad por renglón, y una variable de resultados por columna.
+
+```{r importar lyc}
+sexto_lyc_media <-
+  read_excel("PLANEA_6prim_Resultados_de_Logro_LyC_20160713.xlsx",
+             sheet = "6",
+             skip = 4,
+             col_names = F) %>%
+  slice(1:214) %>%
+  select(X0, X2, X8, X14) %>%
+  filter(!X0 %in% c("Tipo de escuela", NA, "Marginación", "Rural-Urbano")) %>%
+  rename("Entidad" = X0, 
+         "Media_Estatal" = X2,
+         "Media_Hombres" = X8,
+         "Media_Mujeres" = X14) %>%
+  mutate(Media_Genero =
+           as.numeric(Media_Hombres) - as.numeric(Media_Mujeres)) %>%
+  group_by(Entidad) %>%
+  mutate_all(funs(as.numeric)) %>%
+  ungroup()
+
+sexto_lyc_nivel <-
+  read_excel("PLANEA_6prim_Resultados_de_Logro_LyC_20160713.xlsx",
+             sheet = "7",
+             skip = 5,
+             col_names = F) %>%
+  slice(1:214) %>%
+  select(X0, X2, X6, X10, X14, X18, X22) %>%
+  filter(!X0 %in% c("Tipo de escuela", NA, "Marginación", "Rural-Urbano")) %>%
+  rename("Entidad" = X0,
+         "Nivel_1" = X2,
+         "Nivel_2" = X6,
+         "Nivel_3" = X10,
+         "Nivel_4" = X14,
+         "Al_menos_2" = X18,
+         "Al_menos_3" = X22) %>%
+  lapply(., function(columna){
+    gsub(pattern = "\\*", replacement = "", x = columna)
+  }) %>%
+  tbl_df() %>%
+  group_by(Entidad) %>%
+  mutate_all(funs(as.numeric)) %>%
+  ungroup()
+```
+
+Los resultados de Planea 2015 no incluyen datos para algunas Entidades debido a que fue imposible realizar aplicaciones en ellos. Como necesitamos tener un renglon para cada uno de los 32 estados de México, creamos un *data.frame* con sus nombres, que usaremos en el siguiente paso.
+
+```{r entidades}
+entidades <-
+  data.frame(
+    Entidad = c(
+      "Aguascalientes", "Baja California", "Baja California Sur", "Campeche",
+      "Chiapas", "Chihuahua", "Coahuila", "Colima", "Distrito Federal",
+      "Durango", "Guanajuato", "Guerrero", "Hidalgo", "Jalisco", "Mexico",
+      "Michoacan", "Morelos", "Nayarit", "Nuevo Leon", "Oaxaca", "Puebla",
+      "Queretaro", "Quintana Roo", "San Luis Potosi", "Sinaloa", "Sonora",
+      "Tabasco", "Tamaulipas", "Tlaxcala", "Veracruz", "Yucatan", "Zacatecas"
+    )) %>%
+  mutate(Entidad = as.character(Entidad))
+```
+
+Unimos las tablas que hemos creado hasta ahora y eliminamos las tildes de los nombres de entidades. Esto nos permitirá combinar estas tablas con el la información geográfica que usaremos.
+
+```{r unir tablas lyc}
+sexto_lyc <-
+  inner_join(sexto_lyc_media, sexto_lyc_nivel) %>%
+  mutate(Entidad = chartr("áéíóú", "aeiou", Entidad)) %>%
+  left_join(entidades, .) %>% 
+  tbl_df
+```
+
+Como resultado, tendremos la tabla *sexto_lyc* y habremos concluído la primera parte del proceso.
+
+```{r}
+sexto_lyc
+```
+
+## Mapa
+Comprobamos que los nombres de Entidades de nuestra tabla de datos y lo del archivo *shapefile* correspondan, pues son estos nombres los que se usaran para combinar la información de los dos objetos.
+
+El objeto `mex_shape` contiene una gran cantidad de información, por lo que ubicar los nombres de las Entidades puede ser difícil. Estos se encuentran como parte de de la entrada `@data` en este objeto.
+
+```{r}
+identical(mex_shape@data$ADMIN_NAME, sexto_lyc$Entidad)
+```
+
+Ahora combinamos los datos en ambos objetos con la función `append_data` de `tmap`. El parámetro *key.shp* indica qué columna de `@data` sera usada como referencia. *key.data* indica la columna en la tabla que deseamos combinar que debe tener el mismo contenido que lo que declaramos en *key.shp*.
+
+Asignamos el resultado al objeto *mex_mapa*
+
+```{r}
+mex_mapa <- append_data(mex_shape, 
+                        sexto_lyc, 
+                        key.shp = "ADMIN_NAME", 
+                        key.data = "Entidad")
+```
+
+## Generación de mapas temáticos
+Con el objeto *mex_mapa* ahora podemos usar la función *tm_shape* de `tmap`.
+
+
+```{r}
+tm_shape(mex_mapa) +
+  tm_fill("Media_Estatal",
+          title = "Planea 2015 \nCuartiles \nMatemáticas",
+          textNA = "Sin datos",
+          legend.format = list(text.separator = "a"),
+          palette =  "Blues",
+          style = "quantile",
+          n = 4) +
+  tm_borders(alpha = .75,
+             col = "black")
+```
+
+```{r}
+tm_shape(mex_mapa) +
+  tm_fill("Nivel_1",
+          title = "Planea 2015 \nNivel 1",
+          textNA = "Sin datos",
+          legend.format = list(text.separator = "a"),
+          palette =  "Reds",
+          style = "quantile",
+          n = 4) +
+  tm_borders(alpha = .75,
+             col = "black")
+
+tm_shape(mex_mapa) +
+  tm_fill("Nivel_4",
+          title = "Planea 2015 \nNivel 4",
+          textNA = "Sin datos",
+          legend.format = list(text.separator = "a"),
+          palette =  "Greens",
+          style = "quantile",
+          n = 4) +
+  tm_borders(alpha = .75,
+             col = "black")
+
+tm_shape(mex_mapa) +
+  tm_fill(c("Media_Hombres", "Media_Mujeres"),
+          title = "Planea 2015 \nDiferencia género",
+          textNA = "Sin datos",
+          legend.format = list(text.separator = "a"),
+          style = "quantile",
+          palette =  "Purples",
+          free.scales = T,
+          n = 4) +
+  tm_borders(alpha = .75,
+             col = "black")
+```
+
+
+
