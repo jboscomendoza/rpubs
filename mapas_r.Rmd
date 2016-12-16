@@ -157,8 +157,11 @@ mex_mapa <- append_data(mex_shape,
 ```
 
 ## Generación de mapas temáticos
-Con el objeto *mex_mapa* ahora podemos usar la función *tm_shape* de `tmap`.
+Con el objeto *mex_mapa* ahora podemos usar la función *tm_shape* de `tmap` para generar mapas temáticos. Esta función tiene un funcionamiento similar al paquete `ggplot2`, en el que construimos un gráfico capa por capa. 
 
+En este caso, empezamos a construir un mapa temático empezando por la forma de este con `tm_shape`, continuamos con el relleno de las formas usando `tm_fill` y terminamos con los bordes del mapa, con `tm_borders`.
+
+El primer mapa que generaremos tendrá como relleno de las formas usando la variable *Media_Estatal*, que contiene los resultados por estado en la prueba Planea 2015. En `tm_fill` también especificamos algunos otros parámetros para mejorar la presentación del mapa.
 
 ```{r}
 tm_shape(mex_mapa) +
@@ -173,6 +176,8 @@ tm_shape(mex_mapa) +
              col = "black")
 ```
 
+En este mapa usaremos como relleno de forma la variable *Nivel_1*, que contiene el número de estudiantes que tuvieron una puntuación correspondiente al Nivel 1 de desempeño, el nivel más bajo posible.
+
 ```{r}
 tm_shape(mex_mapa) +
   tm_fill("Nivel_1",
@@ -184,7 +189,11 @@ tm_shape(mex_mapa) +
           n = 4) +
   tm_borders(alpha = .75,
              col = "black")
+```
 
+Este mapa muestra el número de estudiantes en el Nivel 4 de desempeño, el más alto de todos, contenido en la variable *Nivel 4*.
+
+```{r}
 tm_shape(mex_mapa) +
   tm_fill("Nivel_4",
           title = "Planea 2015 \nNivel 4",
@@ -195,7 +204,11 @@ tm_shape(mex_mapa) +
           n = 4) +
   tm_borders(alpha = .75,
              col = "black")
+```
 
+Finalmente, un mapa que nos muestra la diferencia en puntuacioes entre hombres y mujeres. Cuando usamos más de una variable como argumento en `tm_fill`, se generan tantos mapas como variables usemos, siempre y cuando la estructura de los datos sea conguente con la forma que estamos usando.
+
+```{r}
 tm_shape(mex_mapa) +
   tm_fill(c("Media_Hombres", "Media_Mujeres"),
           title = "Planea 2015 \nDiferencia género",
@@ -208,6 +221,13 @@ tm_shape(mex_mapa) +
   tm_borders(alpha = .75,
              col = "black")
 ```
+
+Con esto terminamos.
+
+
+Comentarios, correcciones y sugerencias son bienvenidas ([email](mailto:jboscomendoza@gmail.com)).
+
+# Referencias
 
 
 
