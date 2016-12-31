@@ -20,7 +20,7 @@
 #
 # Población de México por entidad en el 2015
 # Se ha copiado el contenido de la tabla presentada en el siguiente enlace al
-# documento "población.xlsx", cambiando el nombre de las entidades a su forma
+# documento "población_2015.xlsx", cambiando el nombre de las entidades a su forma
 # más breve (ej. "Michoacán", en lugar de "Michoacán de Ocampo").
 # http://cuentame.inegi.org.mx/poblacion/habitantes.aspx?tema=P
 #
