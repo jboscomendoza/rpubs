@@ -155,6 +155,26 @@ idh %>% select(rfab_06:rfab_09, salud:mat09) %>%
 c("rfab_06", "rfab_09") %>%
   map(function(grado){
     ggplot() +
+      aes(idh[[grado]], reorder(idh[["entidad"]], idh[[grado]])) +
+      geom_point() +
+      geom_text(aes(label = paste0(idh[["entidad"]], ": ", round(idh[[grado]], 2)), 
+                    family = "plotina"),
+                size = 2, vjust = -.45) +
+      geom_vline(xintercept = mean(idh[[grado]], na.rm = T), alpha = .25) +
+      theme_minimal() +
+      theme(text = element_text(family = "plotina"),
+            axis.text.y = element_blank()) +
+      scale_x_continuous(limits = c(30, 60)) +
+      labs(x = "RFAB", y = "Entidad")
+      ggsave(filename = paste0("rfab_ent_", grado, ".png"),
+             units = "in",
+             width = 6, height = 5, dpi = 150)
+    
+  })
+
+c("rfab_06", "rfab_09") %>%
+  map(function(grado){
+    ggplot() +
       aes(idh[[grado]], idh[["idh"]]) +
       geom_point() +
       geom_text_repel(aes(label = idh[["entidad"]], family = "plotina"),
