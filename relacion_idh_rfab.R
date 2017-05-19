@@ -157,13 +157,12 @@ c("rfab_06", "rfab_09") %>%
     ggplot() +
       aes(idh[[grado]], reorder(idh[["entidad"]], idh[[grado]])) +
       geom_point() +
-      geom_text(aes(label = paste0(idh[["entidad"]], ": ", round(idh[[grado]], 2)), 
+      geom_text(aes(label = round(idh[[grado]], 2), 
                     family = "plotina"),
-                size = 2, vjust = -.45) +
+                  size = 2.5, nudge_x = 1.25) +
       geom_vline(xintercept = mean(idh[[grado]], na.rm = T), alpha = .25) +
       theme_minimal() +
-      theme(text = element_text(family = "plotina"),
-            axis.text.y = element_blank()) +
+      theme(text = element_text(family = "plotina")) +
       scale_x_continuous(limits = c(30, 60)) +
       labs(x = "RFAB", y = "Entidad")
       ggsave(filename = paste0("rfab_ent_", grado, ".png"),
@@ -214,11 +213,3 @@ list(
              units = "in",
              width = 6, height = 5, dpi = 150)
   })
-
-
-
-
-
-
-
-
