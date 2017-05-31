@@ -3,8 +3,6 @@ library(haven)
 library(ineeR)
 library(rpart)
 library(rpart.plot)
-library(rattle)
-library(RColorBrewer)
 
 download.file("http://www.inee.edu.mx/images/stories/2015/planea/bases_de_datos/agosto-2016/bases-de-datos/enero-2017/Planea06_2015_Alumnos.zip",
               "Planea06_2015_Alumnos.zip")
@@ -199,23 +197,19 @@ png(filename = "modelo_nivel_peso_noprv_cpbajo_surrogate_lyc.png")
 
 dev.off()
 
-# Modelo predictivo Sobre basico ----
+# Modelo predictivo - Alcanzan al menos el nivel basico ----
+# Variable que identifica si alcanza al menos básico
+p15 <-
+  p15 %>%
+  mutate(LYC_G = ifelse(as.numeric(LYCNVL) > 1, "Basico", "Debajo_basico"),
+         MAT_G = ifelse(as.numeric(MATNVL) > 1, "Basico", "Debajo_basico"))
 
-set.seed(1024)
+# Set de entrenamiento y prueba
 p15_train <- sample_frac(p15, 0.80)
 p15_test <- setdiff(p15, p15_train)
 
-p15_train <-
-  p15_train %>%
-  mutate(LYC_G = ifelse(as.numeric(LYCNVL) > 1, "BASICO", "NO_BASICO"),
-         MAT_G = ifelse(as.numeric(MATNVL) > 1, "BASICO", "NO_BASICO"))
 
-
-p15_test <-
-  p15_test %>%
-  mutate(LYC_G = ifelse(as.numeric(LYCNVL) > 1, "BASICO", "NO_BASICO"),
-         MAT_G = ifelse(as.numeric(MATNVL) > 1, "BASICO", "NO_BASICO"))
-
+# Ajuste del modelo
 p15_fit_lyc <-
   p15_train %>%
   select(-c(LYC, MAT, MATNVL, LYCNVL, NOM_ENT, MAT_G)) %>%
@@ -223,13 +217,95 @@ p15_fit_lyc <-
   rpart(formula = LYC_G ~ . - W_FSTUWT,
         data = .,
         weights = W_FSTUWT,
-        control = rpart.control(cp = 0.05, surrogatestyle = 2))
+        parms = list(split = "gini"),
+        control = rpart.control(cp = 0.001, surrogatestyle = 2,
+                                minsplit = 5000, minbucket = 1500,
+                                maxdepth = 6))
 
+# Visualizacion del modelo
+rpart.plot(p15_fit_lyc, type = 4, extra = 104)
+
+# Creacion de columna con predicciones
 p15_test$pred <- predict(p15_fit_lyc, p15_test, type = "class")
 
-mean(p15_test$pred == p15_test$LYC_G)
-addmargins(table(p15_test$pred))
-addmargins(table(p15_test$pred, p15_test$LYC_G))
+# Evaluacion de las predicciones
+list(
+  "tabla_verdad" = addmargins(table(p15_test$pred, p15_test$LYC_G)),
+   "tabla_verdad_prop" = prop.table(table(p15_test$pred, p15_test$LYC_G), 1) * 100,
+   "prop_correcto" = mean(p15_test$pred == p15_test$LYC_G)
+)
 
-rpart.plot(p15_fit_lyc)
+# Modelo podado
+## Calculo del valor de cp a usar
+p15_pruned_lyc <-
+  prune(tree = p15_fit_lyc,
+        cp = p15_fit_lyc$cptable[which.min(p15_fit_lyc$cptable[, "xerror"])])
 
+# Visualizacion del modelo podado
+rpart.plot(p15_pruned_lyc, type = 4, extra = 104)
+
+# Creacion de prediccion podada
+p15_test$pred_pruned <- predict(p15_fit_lyc, p15_test, type = "class")
+
+# Evaluacion de las predicciones
+list(
+  "tabla_verdad" = addmargins(table(p15_test$pred_pruned, p15_test$LYC_G)),
+  "tabla_verdad_prop" = prop.table(table(p15_test$pred_pruned, p15_test$LYC_G), 1) * 100,
+  "prop_correcto"= mean(p15_test$pred_pruned == p15_test$LYC_G)
+)
+
+# Mate ----
+#
+p15_train <- sample_frac(p15, 0.80)
+p15_test <- setdiff(p15, p15_train)
+
+
+# Ajuste del modelo
+p15_fit_mat <-
+  p15_train %>%
+  select(-c(LYC, MAT, MATNVL, LYCNVL, LYC_G, NOM_ENT)) %>%
+  #filter(SERV != "PRV") %>%
+  rpart(formula = MAT_G ~ . - W_FSTUWT,
+        data = .,
+        weights = W_FSTUWT,
+        parms = list(split = "gini"),
+        control = rpart.control(cp = 0.001, surrogatestyle = 2,
+                                minsplit = 4500, minbucket = 1500,
+                                maxdepth = 5))
+
+# Visualizacion del modelo
+rpart.plot(p15_fit_mat, type = 4, extra = 104)
+
+# Creacion de columna con predicciones
+p15_test$pred <- predict(p15_fit_mat, p15_test, type = "class")
+
+# Evaluacion de las predicciones
+list(
+  "tabla_verdad" = addmargins(table(p15_test$pred, p15_test$MAT_G)),
+  "tabla_verdad_prop" = prop.table(table(p15_test$pred, p15_test$MAT_G), 1) * 100,
+  "prop_correcto" = mean(p15_test$pred == p15_test$MAT_G)
+)
+
+# Modelo podado
+## Calculo del valor de cp a usar
+p15_pruned_mat <-
+  prune(tree = p15_fit_mat,
+        cp = p15_fit_mat$cptable[which.min(p15_fit_mat$cptable[, "xerror"])])
+
+# Visualizacion del modelo podado
+rpart.plot(p15_pruned_mat, type = 4, extra = 104)
+
+# Creacion de prediccion podada
+p15_test$pred_pruned <- predict(p15_fit_mat, p15_test, type = "class")
+
+# Evaluacion de las predicciones
+list(
+  "tabla_verdad" = addmargins(table(p15_test$pred_pruned, p15_test$MAT_G)),
+  "tabla_verdad_prop" = prop.table(table(p15_test$pred_pruned, p15_test$MAT_G), 1) * 100,
+  "prop_correcto"= mean(p15_test$pred_pruned == p15_test$MAT_G)
+)
+
+
+
+# Podemos mejorar el modelo transformando grupos de reactivos, que se supone forman una escala
+# En una medida resumen, de modo que aporten mayor información sin redundancia
