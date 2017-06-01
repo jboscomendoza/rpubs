@@ -308,4 +308,62 @@ list(
 
 
 # Podemos mejorar el modelo transformando grupos de reactivos, que se supone forman una escala
-# En una medida resumen, de modo que aporten mayor información sin redundancia
+# En una medida resumen, de modo que aporten mayor información sin redundancia. Además, podemos introducir las variables que han demostrado mayor contribución, excluyendo las demás, o al revés... Mejor probemos al revés.
+
+# Mejor como una funcion
+#
+
+arbol_p15 <- function(tabla, arb_formula){
+  p15_train <- sample_frac(tabla, 0.80)
+  p15_test <- setdiff(tabla, p15_train)
+
+  p15_fit <-
+    p15_train %>%
+    rpart(formula = arb_formula,
+          data = .,
+          weights = W_FSTUWT,
+          parms = list(split = "gini"),
+          control = rpart.control(cp = 0.001, surrogatestyle = 2,
+                                  minsplit = 4500, minbucket = 1500,
+                                  maxdepth = 5))
+  gc()
+
+  p15_test$pred <-
+    predict(p15_fit, p15_test, type = "class")
+  resultados <-
+    list(
+      "t_verdad" = addmargins(table(p15_test$pred, p15_test$MAT_G)),
+      "t_verdad_prop" = prop.table(table(p15_test$pred, p15_test$MAT_G), 1) * 100,
+      "prop_correcto" = mean(p15_test$pred == p15_test$MAT_G)
+    )
+
+  p15_pruned <-
+    prune(tree = p15_fit_mat,
+          cp = p15_fit$cptable[which.min(p15_fit$cptable[, "xerror"])])
+
+  gc()
+
+  p15_test$pred_pruned <- predict(p15_fit, p15_test, type = "class")
+
+  resultados <-
+    c(resultados,
+      list(
+        "t_verdad_prune" = addmargins(table(p15_test$pred_pruned, p15_test$MAT_G)),
+        "t_verdad_prop_prune" = prop.table(table(p15_test$pred_pruned, p15_test$MAT_G), 1) * 100,
+        "prop_correcto_prune"= mean(p15_test$pred_pruned == p15_test$MAT_G)
+      ))
+
+  resultados
+}
+
+map(1:10, function(x) {
+
+  tabla_resultado <- arbol_p15(tabla = p15 %>% select(-c(LYC, MATNVL, MAT, LYCNVL, LYC_G, NOM_ENT)),
+                               arb_formula = MAT_G ~ . -W_FSTUWT)
+  gc()
+
+  tabla_resultado$prop_correcto_prune
+
+}) %>%
+  cbind() %>%
+  mean()
