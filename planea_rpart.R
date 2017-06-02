@@ -356,14 +356,58 @@ arbol_p15 <- function(tabla, arb_formula){
   resultados
 }
 
-map(1:10, function(x) {
-
-  tabla_resultado <- arbol_p15(tabla = p15 %>% select(-c(LYC, MATNVL, MAT, LYCNVL, LYC_G, NOM_ENT)),
-                               arb_formula = MAT_G ~ . -W_FSTUWT)
+prop_correcto_prune <-
+  map(1:10, function(x) {
+  tabla_resultado <-
+    arbol_p15(tabla = p15 %>% select(-c(LYC, MATNVL, MAT, LYCNVL, LYC_G, NOM_ENT)),
+              arb_formula = MAT_G ~ . -W_FSTUWT)
   gc()
 
   tabla_resultado$prop_correcto_prune
 
-}) %>%
-  cbind() %>%
-  mean()
+})
+
+
+# Vamos a hacer escalas tomando los valores de las preguntas
+# Más sofisticado, determinar componentes principales o factores, determinar el
+# peso de cada variable y a partir de ello determinar una puntuación por
+# escala
+
+p15_escalas <-
+  p15 %>%
+  select(starts_with("AB")) %>%
+  map(function(x) {
+    x <- as.numeric(x)
+    ifelse(is.na(x), 0, x)
+  }) %>%
+  tbl_df %>%
+  transmute(
+    indigena = AB001 + AB003,
+    discapacidad = AB004 + AB005 + AB006 + AB007 + AB008 + AB009,
+    trabajo = AB017 + AB018,
+    violencia = AB045 + AB046 + AB047 + AB048,
+    conv_doc = AB050 + AB051 + AB052 + AB053 + AB054 + AB055 + AB056,
+    clases = AB069 + AB070 + AB071 + AB072 + AB073,
+    act_caro = AB074 + AB075 + AB076 + AB077,
+    act_pop = AB078 + AB079 + AB080,
+    apoyo_pat = AB081 + AB082
+  )
+
+memes_dank <-
+  bind_cols(
+    p15 %>% select(SERV:I_MULTIGRADO, SEXO, EDAD, MAT_G),
+    p15_escalas
+  ) %>%
+  filter(SERV != "PRV") %>%
+  rpart(MAT_G ~ ., data = .,
+        control = rpart.control(cp = 0.001, minsplit = 6000, minbucket = 2000,
+                                maxdepth = 6))
+
+rpart.plot(memes_dank, extra = 104)
+
+bind_cols(
+  p15 %>% select(SERV:I_MULTIGRADO, SEXO, EDAD, MAT_G, W_FSTUWT, AB001, AB004),
+  p15_escalas
+) %>%
+  arbol_p15(arb_formula = MAT_G ~.)
+
