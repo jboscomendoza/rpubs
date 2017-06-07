@@ -1,11 +1,21 @@
-# Paquetes ----
+#  #   #
+# Cambiar los primeros modelos a llamas de la función que estima la precision
+# de las prediccciones de rpart.
+#  #   #
+
+# Paquetes necesarios ----
+# Lectura y manipulacion de datos
 library(tidyverse)
 library(haven)
-library(ineeR)
+# Arboles de clasificacion
 library(rpart)
 library(rpart.plot)
+# Random Forest
+#library(randomForest)
+# Para analisis factorial
+library(psych)
 
-# Descargas ----
+# Descarga de los archivos necesarios ----
 download.file("http://www.inee.edu.mx/images/stories/2015/planea/bases_de_datos/agosto-2016/bases-de-datos/enero-2017/Planea06_2015_Alumnos.zip",
               "Planea06_2015_Alumnos.zip")
 
@@ -15,307 +25,28 @@ download.file("http://www.inee.edu.mx/images/stories/2015/planea/bases_de_datos/
 
 unzip("Planea06_2015_Alumnos.zip")
 
+# Lectura de la base de datos ----
 p15 <-
   read_sav("Planea06_2015_Alumnos.sav") %>%
   select(NOM_ENT, SERV, MARGINC, TAM_LOC_PRI, I_MULTIGRADO, ID_LYC_INSTR,
          ID_MAT_INSTR, SEXO, EDAD, W_FSTUWT, AB001, AB002, AB003:AB082,
-         LYC = PV1LYC, LYCNVL = LYCNVL1, MAT = PV1MAT, MATNVL = MATNVL1, RFAB)
+         LYC_III = LYCNVLIII1, MAT_III = MATNVLIII1, RFAB) %>%
+  map_if(is.character, as.factor) %>%
+  map_if(is.labelled,  as.factor) %>%
+  tbl_df() %>%
+  mutate(
+    LYC_III = recode(LYC_III, "0" = "No", "1" = "Si"),
+    MAT_III = recode(MAT_III, "0" = "No", "1" = "Si")
+    )
+
+p15$MAT_III[p15$MAT_III == "NaN"] <- NA
+
+p15$MAT_III <- factor(p15$MAT_III,  levels = c("No", "Si"))
 
 gc()
 
-p15 <-
-  p15 %>%
-  map_if(is.character, as.factor) %>%
-  map_if(is.labelled, as.factor) %>%
-  tbl_df()
-
-# Modelo simple ----
-png(filename = "modelo_simple_lyc.png")
-p15 %>%
-  select(-c(LYCNVL, MAT, MATNVL)) %>%
-  rpart(formula = LYC ~ ., data = ., method = "anova") %>%
-  rpart.plot()
-dev.off()
-
-png(filename = "modelo_simple_mat.png")
-p15 %>%
-  select(-c(LYCNVL, LYC, MATNVL)) %>%
-  rpart(formula = MAT ~ ., data = ., method = "anova") %>%
-  rpart.plot()
-dev.off()
-
-
-# Modelo excluyendo escuelas privadas ----
-png(filename = "modelo_noprv_mat.png")
-p15 %>%
-  select(-c(LYCNVL, LYC, MATNVL)) %>%
-  filter(SERV != "PRV") %>%
-  rpart(formula = MAT ~ ., data = ., method = "anova") %>%
-  rpart.plot()
-dev.off()
-
-png(filename = "modelo_noprv_lyc.png")
-p15 %>%
-  select(-c(LYCNVL, MAT, MATNVL)) %>%
-  filter(SERV != "PRV") %>%
-  rpart(formula = LYC ~ ., data = ., method = "anova") %>%
-  rpart.plot()
-dev.off()
-
-# Modelo con pesos ----
-
-png(filename = "modelo_noprv_peso_mat.png")
-p15 %>%
-  select(-c(LYCNVL, LYC, MATNVL)) %>%
-  filter(SERV != "PRV") %>%
-  rpart(formula = MAT ~ ., data = ., method = "anova", weights = W_FSTUWT) %>%
-  rpart.plot()
-dev.off()
-
-png(filename = "modelo_noprv_peso_lyc.png")
-p15 %>%
-  select(-c(LYCNVL, MAT, MATNVL)) %>%
-  filter(SERV != "PRV") %>%
-  rpart(formula = LYC ~ ., data = ., method = "anova", weights = W_FSTUWT) %>%
-  rpart.plot()
-dev.off()
-
-#                         #
-# Usar siempre los pesos. #
-#                         #
-
-# Modelo con cp bajo----
-png(filename = "modelo_noprv_peso_cpbajo_mat.png")
-p15 %>%
-  select(-c(LYCNVL, LYC, MATNVL, NOM_ENT)) %>%
-  filter(SERV != "PRV") %>%
-  rpart(formula = MAT ~ ., data = ., method = "anova", weights = W_FSTUWT,
-        control = rpart.control(cp = 0.005)) %>%
-  rpart.plot()
-dev.off()
-
-png(filename = "modelo_noprv_peso_cpbajo_lyc.png")
-p15 %>%
-  select(-c(LYCNVL, MAT, MATNVL, NOM_ENT)) %>%
-  filter(SERV != "PRV") %>%
-  rpart(formula = LYC ~ ., data = ., method = "anova", weights = W_FSTUWT,
-        control = rpart.control(cp = 0.005)) %>%
-  rpart.plot()
-dev.off()
-
-
-# Modelo con surrogate de porcentaje correcto y cp bajo
-png(filename = "modelo_noprv_peso_cpbajo_surrogate_mat.png")
-p15 %>%
-  select(-c(LYCNVL, LYC, MATNVL, NOM_ENT)) %>%
-  filter(SERV != "PRV") %>%
-  rpart(formula = MAT ~ . - W_FSTUWT, data = ., method = "anova",
-        weights = W_FSTUWT,
-        control = rpart.control(cp = 0.005, surrogatestyle = 1)) %>%
-  rpart.plot()
-dev.off()
-
-png(filename = "modelo_noprv_peso_cpbajo_surrogate_lyc.png")
-p15 %>%
-  select(-c(LYCNVL, MAT, MATNVL, NOM_ENT)) %>%
-  filter(SERV != "PRV") %>%
-  rpart(formula = LYC ~ . - W_FSTUWT, data = ., method = "anova",
-        weights = W_FSTUWT,
-        control = rpart.control(cp = 0.005, surrogatestyle = 1)) %>%
-  rpart.plot(type = 3, extra = 101)
-dev.off()
-
-# Modelo por nivel de logro ----
-png(filename = "modelo_nivel_peso_cpbajo_surrogate_lyc.png")
-p15 %>%
-  select(-c(LYC, MAT, MATNVL, NOM_ENT)) %>%
-  rpart(formula = LYCNVL ~ . - W_FSTUWT,
-        data = .,
-        weights = W_FSTUWT,
-        control = rpart.control(cp = 0.005, surrogatestyle = 1)) %>%
-  rpart.plot(type = 3, extra = 104)
-dev.off()
-
-
-png(filename = "modelo_nivel_peso_cpbajo_surrogate_mat.png")
-p15 %>%
-  select(-c(LYC, MAT, LYCNVL, NOM_ENT)) %>%
-  rpart(formula = MATNVL ~ . - W_FSTUWT,
-        data = .,
-        weights = W_FSTUWT,
-        control = rpart.control(cp = 0.005, surrogatestyle = 1)) %>%
-  rpart.plot(type = 3, extra = 104)
-dev.off()
-
-
-
-# Modelo por nivel de logro, sin privada ----
-png(filename = "modelo_nivel_peso_noprv_cpbajo_surrogate_lyc.png")
-p15 %>%
-  select(-c(LYC, MAT, MATNVL, NOM_ENT)) %>%
-  filter(SERV != "PRV") %>%
-  rpart(formula = LYCNVL ~ . - W_FSTUWT,
-        data = .,
-        weights = W_FSTUWT,
-        control = rpart.control(cp = 0.005, surrogatestyle = 1)) %>%
-  rpart.plot(type = 3, extra = 104)
-dev.off()
-
-
-png(filename = "modelo_nivel_peso_noprv_cpbajo_surrogate_mat.png")
-p15 %>%
-  select(-c(LYC, MAT, LYCNVL, NOM_ENT)) %>%
-  filter(SERV != "PRV") %>%
-  rpart(formula = MATNVL ~ . - W_FSTUWT,
-        data = .,
-        weights = W_FSTUWT,
-        control = rpart.control(cp = 0.005, surrogatestyle = 1)) %>%
-  rpart.plot(type = 3, extra = 104)
-dev.off()
-
-
-# Modelo predictivo ----
-
-set.seed(1024)
-p15_train <- sample_frac(p15, 0.80)
-p15_test <- setdiff(p15, p15_train)
-
-p15_fit_lyc <-
-  p15_train %>%
-  select(-c(LYC, MAT, MATNVL, NOM_ENT)) %>%
-  #filter(SERV != "PRV") %>%
-  rpart(formula = LYCNVL ~ . - W_FSTUWT,
-        data = .,
-        weights = W_FSTUWT,
-        control = rpart.control(cp = 0.01, surrogatestyle = 2))
-
-p15_test$pred <- predict(p15_fit_lyc, p15_test, type = "class")
-
-mean(p15_test$pred == p15_test$LYCNVL)
-addmargins(table(p15_test$pred))
-addmargins(table(p15_test$pred, p15_test$LYCNVL))
-
-png(filename = "modelo_nivel_peso_noprv_cpbajo_surrogate_lyc.png")
-
-dev.off()
-
-# Modelo predictivo - Alcanzan al menos el nivel basico ----
-# Variable que identifica si alcanza al menos básico
-p15 <-
-  p15 %>%
-  mutate(LYC_G = ifelse(as.numeric(LYCNVL) > 1, "Basico", "Debajo_basico"),
-         MAT_G = ifelse(as.numeric(MATNVL) > 1, "Basico", "Debajo_basico"))
-
-# Set de entrenamiento y prueba
-p15_train <- sample_frac(p15, 0.80)
-p15_test <- setdiff(p15, p15_train)
-
-
-# Ajuste del modelo
-p15_fit_lyc <-
-  p15_train %>%
-  select(-c(LYC, MAT, MATNVL, LYCNVL, NOM_ENT, MAT_G)) %>%
-  #filter(SERV != "PRV") %>%
-  rpart(formula = LYC_G ~ . - W_FSTUWT,
-        data = .,
-        weights = W_FSTUWT,
-        parms = list(split = "gini"),
-        control = rpart.control(cp = 0.001, surrogatestyle = 2,
-                                minsplit = 5000, minbucket = 1500,
-                                maxdepth = 6))
-
-# Visualizacion del modelo
-rpart.plot(p15_fit_lyc, type = 4, extra = 104)
-
-# Creacion de columna con predicciones
-p15_test$pred <- predict(p15_fit_lyc, p15_test, type = "class")
-
-# Evaluacion de las predicciones
-list(
-  "tabla_verdad" = addmargins(table(p15_test$pred, p15_test$LYC_G)),
-  "tabla_verdad_prop" = prop.table(table(p15_test$pred, p15_test$LYC_G), 1) * 100,
-  "prop_correcto" = mean(p15_test$pred == p15_test$LYC_G)
-)
-
-# Modelo podado
-## Calculo del valor de cp a usar
-p15_pruned_lyc <-
-  prune(tree = p15_fit_lyc,
-        cp = p15_fit_lyc$cptable[which.min(p15_fit_lyc$cptable[, "xerror"])])
-
-# Visualizacion del modelo podado
-rpart.plot(p15_pruned_lyc, type = 4, extra = 104)
-
-# Creacion de prediccion podada
-p15_test$pred_pruned <- predict(p15_fit_lyc, p15_test, type = "class")
-
-# Evaluacion de las predicciones
-list(
-  "tabla_verdad" = addmargins(table(p15_test$pred_pruned, p15_test$LYC_G)),
-  "tabla_verdad_prop" = prop.table(table(p15_test$pred_pruned, p15_test$LYC_G), 1) * 100,
-  "prop_correcto"= mean(p15_test$pred_pruned == p15_test$LYC_G)
-)
-
-# Mate ----
-#
-p15_train <- sample_frac(p15, 0.80)
-p15_test <- setdiff(p15, p15_train)
-
-
-# Ajuste del modelo
-p15_fit_mat <-
-  p15_train %>%
-  select(-c(LYC, MAT, MATNVL, LYCNVL, LYC_G, NOM_ENT)) %>%
-  #filter(SERV != "PRV") %>%
-  rpart(formula = MAT_G ~ . - W_FSTUWT,
-        data = .,
-        weights = W_FSTUWT,
-        parms = list(split = "gini"),
-        control = rpart.control(cp = 0.001, surrogatestyle = 2,
-                                minsplit = 4500, minbucket = 1500,
-                                maxdepth = 5))
-
-# Visualizacion del modelo
-rpart.plot(p15_fit_mat, type = 4, extra = 104)
-
-# Creacion de columna con predicciones
-p15_test$pred <- predict(p15_fit_mat, p15_test, type = "class")
-
-# Evaluacion de las predicciones
-list(
-  "tabla_verdad" = addmargins(table(p15_test$pred, p15_test$MAT_G)),
-  "tabla_verdad_prop" = prop.table(table(p15_test$pred, p15_test$MAT_G), 1) * 100,
-  "prop_correcto" = mean(p15_test$pred == p15_test$MAT_G)
-)
-
-# Modelo podado
-## Calculo del valor de cp a usar
-p15_pruned_mat <-
-  prune(tree = p15_fit_mat,
-        cp = p15_fit_mat$cptable[which.min(p15_fit_mat$cptable[, "xerror"])])
-
-# Visualizacion del modelo podado
-rpart.plot(p15_pruned_mat, type = 4, extra = 104)
-
-# Creacion de prediccion podada
-p15_test$pred_pruned <- predict(p15_fit_mat, p15_test, type = "class")
-
-# Evaluacion de las predicciones
-list(
-  "tabla_verdad" = addmargins(table(p15_test$pred_pruned, p15_test$MAT_G)),
-  "tabla_verdad_prop" = prop.table(table(p15_test$pred_pruned, p15_test$MAT_G), 1) * 100,
-  "prop_correcto"= mean(p15_test$pred_pruned == p15_test$MAT_G)
-)
-
-
-
-# Podemos mejorar el modelo transformando grupos de reactivos, que se supone forman una escala
-# En una medida resumen, de modo que aporten mayor información sin redundancia. Además, podemos introducir las variables que han demostrado mayor contribución, excluyendo las demás, o al revés... Mejor probemos al revés.
-
-# Mejor como una funcion
-#
-
-arbol_p15 <- function(tabla, var_objetivo){
+# Funcion para probar modelos de rpart -----
+arbol_p15 <- function(tabla, var_objetivo, cp_usado = 0.001, tipo = "class"){
   p15_train <- sample_frac(tabla, 0.80)
   p15_test <- setdiff(tabla, p15_train)
 
@@ -329,22 +60,24 @@ arbol_p15 <- function(tabla, var_objetivo){
           data = .,
           weights = W_FSTUWT,
           parms = list(split = "gini"),
-          control = rpart.control(cp = 0.001, surrogatestyle = 2,
-                                  minsplit = 4500, minbucket = 1500,
+          control = rpart.control(cp = cp_usado, surrogatestyle = 0,
+                                  minsplit = 3000, minbucket = 1000,
                                   maxdepth = 5))
   gc()
 
   p15_test$pred <-
-    predict(p15_fit, p15_test, type = "class")
+    predict(p15_fit, p15_test, type = tipo)
 
   resultados <-
     list(
-      "t_verdad" = addmargins(table(p15_test$pred,
+      "m_confusion" = addmargins(table(p15_test$pred,
                                     p15_test[[var_objetivo]])),
-      "t_verdad_prop" = prop.table(
+      "m_confusion_prop" = prop.table(
         table(p15_test$pred, p15_test[[var_objetivo]]), 1
       ) * 100,
-      "prop_correcto" = mean(p15_test$pred == p15_test[[var_objetivo]])
+      "prop_correcto" = mean(p15_test$pred == p15_test[[var_objetivo]],
+                             na.rm = T),
+      "modelo" = p15_fit
     )
 
   p15_pruned <-
@@ -353,34 +86,48 @@ arbol_p15 <- function(tabla, var_objetivo){
 
   gc()
 
-  p15_test$pred_pruned <- predict(p15_fit, p15_test, type = "class")
+  p15_test$pred_pruned <- predict(p15_fit, p15_test, type = tipo)
 
   resultados <-
     c(resultados,
       list(
-        "t_verdad_prune" = addmargins(table(p15_test$pred_pruned,
+        "m_confusion_prune" = addmargins(table(p15_test$pred_pruned,
                                             p15_test[[var_objetivo]])),
-        "t_verdad_prop_prune" = prop.table(table(p15_test$pred_pruned,
+        "m_confusion_prop_prune" = prop.table(table(p15_test$pred_pruned,
                                                  p15_test[[var_objetivo]]), 1) * 100,
-        "prop_correcto_prune"= mean(p15_test$pred_pruned == p15_test[[var_objetivo]])
+        "prop_correcto_prune"= mean(p15_test$pred_pruned == p15_test[[var_objetivo]],
+                                    na.rm = T),
+        "modelo_prune" = p15_pruned
       ))
 
   resultados
 }
 
-prop_correcto_prune <-
-  map(1:10, function(x) {
-    tabla_resultado <-
-      arbol_p15(tabla = p15 %>% select(-c(LYC, MATNVL, MAT, LYCNVL, LYC_G, NOM_ENT)),
-                arb_formula = MAT_G ~ . -W_FSTUWT)
-    gc()
+# rpart - modelo simple----
+p15_rpart <- list()
 
-    tabla_resultado$prop_correcto_prune
+p15_rpart$simple_lyc <-
+  select(p15, -c(MAT_III)) %>%
+  arbol_p15(tabla = ., var_objetivo = "LYC_III")
 
-  })
+p15_rpart$simple_mat <-
+  select(p15, -c(LYC_III)) %>%
+  arbol_p15(tabla = ., var_objetivo = "MAT_III")
 
+# rpart - modelo excluyendo escuelas privadas ----
+p15_rpart$nopriv_lyc <-
+  select(p15, -c(MAT_III)) %>%
+  filter(SERV != "PRV") %>%
+  arbol_p15(tabla = ., var_objetivo = "LYC_III")
 
-# Vamos a hacer escalas tomando los valores de las preguntas
+p15_rpart$nopriv_mat <-
+  select(p15, -c(LYC_III)) %>%
+  filter(SERV != "PRV") %>%
+  arbol_p15(tabla = ., var_objetivo = "MAT_III")
+
+# p15 - constuccion de escalas simples ----
+# En una medida resumen, de modo que aporten mayor información sin redundancia. Además, podemos introducir las variables que han demostrado mayor contribución, excluyendo las demás, o al revés... Mejor probemos al revés.
+# Sumamos el valor de las respuesta para cada pregunta para crear una puntuacion
 # Más sofisticado, determinar componentes principales o factores, determinar el
 # peso de cada variable y a partir de ello determinar una puntuación por
 # escala
@@ -411,18 +158,7 @@ p15_escalas <-
     apoyo_pat = AB081 + AB082
   )
 
-memes_dank <-
-  bind_cols(
-    p15 %>% select(SERV:I_MULTIGRADO, SEXO, EDAD, MAT_G),
-    p15_escalas
-  ) %>%
-  filter(SERV != "PRV") %>%
-  rpart(MAT_G ~ ., data = .,
-        control = rpart.control(cp = 0.001, minsplit = 6000, minbucket = 2000,
-                                maxdepth = 6))
-
-rpart.plot(memes_dank, extra = 104)
-
+# rpart - modelo con escalas simples ----
 bind_cols(
   p15 %>% select(SERV:I_MULTIGRADO, SEXO, EDAD, MAT_G, W_FSTUWT),
   p15_escalas
@@ -436,30 +172,10 @@ bind_cols(
   arbol_p15(var_objetivo = "LYC_G")
 
 
-library(randomForest)
-arbol_aleatorio <-
-  bind_cols(
-    p15 %>% select(SERV:I_MULTIGRADO, SEXO, EDAD, LYC_G, RFAB),
-    p15_escalas
-  ) %>%
-  map(function(x) {
-    ifelse(is.na(x), 0, x)}
-  ) %>%
-  data.frame %>%
-  sample_frac(.8) %>%
-  randomForest(LYC_G ~ ., data = .)
-
-arbol_aleatorio
-
-varImpPlot(arbol_aleatorio,
-           sort = T,
-           n.var = 15,
-           main = "Top 10 - Variable Importance")
-
-# Probemos con los pesos factoriales para determinar los atributos -----
-
+# Fa con todas las variables, ocho factores de acuerdo a resultado de vss ----
 library(psych)
 
+# VSS para estimar número de factores
 p15_vss <-
   vss(p15 %>%
         select(starts_with("AB")) %>%
@@ -467,20 +183,7 @@ p15_vss <-
       rotate = "varimax",
       n = 12)
 
-p15_paralell <-
-  fa.parallel(p15 %>%
-        select(starts_with("AB")) %>%
-          mutate_all(.funs = "as.numeric"),
-        cor = "mixed")
-
-
-library(tidyverse)
-library(psych)
-library(rpart)
-library(rpart.plot)
-
-# Fa con todas las variables, ocho factores de acuerdo a resultado de vss ----
-# Sin embargo, después
+# Ahora sí, FA con los ocho factores que encuentra fa
 # Varimax, para buscar ortogonalidad en los datos
 # matriz de correlacion mixta, aunque sea más lento, es más preciso
 # Con peso muestral e imputando la mediana
@@ -601,6 +304,30 @@ dev.off()
 
 file.show("p15_fac.png")
 
-# Ahora toca usar XGboost
+# Ahora toca usar XGboost, o Naive Bayes
+
+# Random Forest ----
+# No está de más probar este, pero quizás es mejor dejarlo para el final,
+# después de definir las variables
+# library(randomForest)
+# arbol_aleatorio <-
+#   bind_cols(
+#     p15 %>% select(SERV:I_MULTIGRADO, SEXO, EDAD, LYC_G, RFAB),
+#     p15_escalas
+#   ) %>%
+#   map(function(x) {
+#     ifelse(is.na(x), 0, x)}
+#   ) %>%
+#   data.frame %>%
+#   sample_frac(.8) %>%
+#   randomForest(LYC_G ~ ., data = .)
+#
+# arbol_aleatorio
+#
+# varImpPlot(arbol_aleatorio,
+#            sort = T,
+#            n.var = 15,
+#            main = "Importancia de las variables")
+
 
 
