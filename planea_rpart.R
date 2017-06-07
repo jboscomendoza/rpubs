@@ -1,8 +1,3 @@
-#  #   #
-# Cambiar los primeros modelos a llamas de la función que estima la precision
-# de las prediccciones de rpart.
-#  #   #
-
 # Paquetes necesarios ----
 # Lectura y manipulacion de datos
 library(tidyverse)
@@ -28,7 +23,7 @@ unzip("Planea06_2015_Alumnos.zip")
 # Lectura de la base de datos ----
 p15 <-
   read_sav("Planea06_2015_Alumnos.sav") %>%
-  select(NOM_ENT, SERV, MARGINC, TAM_LOC_PRI, I_MULTIGRADO, ID_LYC_INSTR,
+  select(SERV, MARGINC, TAM_LOC_PRI, I_MULTIGRADO, ID_LYC_INSTR,
          ID_MAT_INSTR, SEXO, EDAD, W_FSTUWT, AB001, AB002, AB003:AB082,
          LYC_III = LYCNVLIII1, MAT_III = MATNVLIII1, RFAB) %>%
   map_if(is.character, as.factor) %>%
@@ -39,9 +34,12 @@ p15 <-
     MAT_III = recode(MAT_III, "0" = "No", "1" = "Si")
     )
 
+# Limpiamos factores
 p15$MAT_III[p15$MAT_III == "NaN"] <- NA
-
 p15$MAT_III <- factor(p15$MAT_III,  levels = c("No", "Si"))
+
+# Eliminamos todos los casos sin ninguna respuesta a las preguntas de contexto
+p15 <- p15[rowSums(is.na(p15)) != ncol(p15[, 11:92]), ]
 
 gc()
 
@@ -49,6 +47,13 @@ gc()
 arbol_p15 <- function(tabla, var_objetivo, cp_usado = 0.001, tipo = "class"){
   p15_train <- sample_frac(tabla, 0.80)
   p15_test <- setdiff(tabla, p15_train)
+
+  prob_prior <-
+    if(var_objetivo == "MAT_III") {
+      c(0.7725, 1 - 0.7725)
+    } else {
+      c(0.8068, 1 - 0.8068)
+    }
 
   var_formula <-
     paste0(var_objetivo, "~ .") %>%
@@ -59,10 +64,9 @@ arbol_p15 <- function(tabla, var_objetivo, cp_usado = 0.001, tipo = "class"){
     rpart(formula = var_formula,
           data = .,
           weights = W_FSTUWT,
-          parms = list(split = "gini"),
+          parms = list(split = "information", prior = prob_prior),
           control = rpart.control(cp = cp_usado, surrogatestyle = 0,
-                                  minsplit = 3000, minbucket = 1000,
-                                  maxdepth = 5))
+                                  minsplit = 4500, minbucket = 1500))
   gc()
 
   p15_test$pred <-
@@ -126,7 +130,7 @@ p15_rpart$nopriv_mat <-
   arbol_p15(tabla = ., var_objetivo = "MAT_III")
 
 # p15 - constuccion de escalas simples ----
-# En una medida resumen, de modo que aporten mayor información sin redundancia. Además, podemos introducir las variables que han demostrado mayor contribución, excluyendo las demás, o al revés... Mejor probemos al revés.
+# En una medida resumen, de modo que aporten mayor información sin redundancia.
 # Sumamos el valor de las respuesta para cada pregunta para crear una puntuacion
 # Más sofisticado, determinar componentes principales o factores, determinar el
 # peso de cada variable y a partir de ello determinar una puntuación por
@@ -159,18 +163,19 @@ p15_escalas <-
   )
 
 # rpart - modelo con escalas simples ----
-bind_cols(
-  p15 %>% select(SERV:I_MULTIGRADO, SEXO, EDAD, MAT_G, W_FSTUWT),
-  p15_escalas
-) %>%
-  arbol_p15(var_objetivo = "MAT_G")
+p15_rpart$esimple_lyc <-
+  bind_cols(
+    select(p15, -c(MAT_III, AB001:AB013, AB017, AB018, AB045:AB058, AB069:AB082)),
+    p15_escalas
+  ) %>%
+  arbol_p15(var_objetivo = "LYC_III")
 
-bind_cols(
-  p15 %>% select(SERV:I_MULTIGRADO, SEXO, EDAD, LYC_G, W_FSTUWT),
-  p15_escalas
-) %>%
-  arbol_p15(var_objetivo = "LYC_G")
-
+p15_rpart$esimple_mat <-
+  bind_cols(
+    select(p15, -c(LYC_III, AB001:AB013, AB017, AB018, AB045:AB058, AB069:AB082)),
+    p15_escalas
+  ) %>%
+  arbol_p15(var_objetivo = "MAT_III")
 
 # Fa con todas las variables, ocho factores de acuerdo a resultado de vss ----
 library(psych)
@@ -216,7 +221,7 @@ p15_fa$fa_8_v3 <-
   fa(nfactors = 8, rotate = "varimax",
      cor = "mixed", weight = p15$W_FSTUWT, impute = "median")
 
-# Subimos la exigencia a carga de ,3 o mayor
+# Subimos la exigencia a carga de 0.3 o mayor
 p15_fa$fa_8_v4 <-
   p15 %>%
   select(starts_with("AB"),
@@ -269,40 +274,66 @@ p15_fa_scores <-
          viol_esco = MR4, bien_basi = MR6, lect_apoy = MR8, clas_extr = MR10,
          estu_expe = MR3, trab_esco = MR7)
 
-#Hagamos una prueba
-p15_with_scores <-
+# Escala factorial ----
+
+p15_rpart$esfact_lyc <-
   bind_cols(
-    select(p15, LYC_G, SEXO, EDAD, SERV, MARGINC,
+    select(p15, SERV:W_FSTUWT, RFAB, LYC_III,
            AB001:AB003, AB010, AB012:AB016, AB020, AB033, AB060, AB063, AB064,
-           AB011, AB019,
-           W_FSTUWT),
+           AB011, AB019),
     p15_fa_scores
-  )
+  ) %>%
+  arbol_p15(var_objetivo = "LYC_III")
 
-p15_with_scores_train <- sample_frac(p15_with_scores, .8)
-p15_with_scores_test  <- setdiff(p15_with_scores, p15_with_scores_train)
+p15_rpart$esfact_mat <-
+  bind_cols(
+    select(p15, SERV:W_FSTUWT, RFAB, MAT_III,
+           AB001:AB003, AB010, AB012:AB016, AB020, AB033, AB060, AB063, AB064,
+           AB011, AB019),
+    p15_fa_scores
+  ) %>%
+  arbol_p15(var_objetivo = "MAT_III")
 
-p15_with_scores_fit <-
-  rpart(LYC_G ~ . -W_FSTUWT,
-        data = p15_with_scores_train, weights = W_FSTUWT,
-        control = rpart.control(cp = 0.0005, maxdepth = 5,
-                                minsplit = 6000, minbucket = 2500))
+# Escala factorial, sin privadas ----
+p15_rpart$esfactnoprv_lyc <-
+  bind_cols(
+    select(p15, SERV:W_FSTUWT, RFAB, LYC_III,
+           AB001:AB003, AB010, AB012:AB016, AB020, AB033, AB060, AB063, AB064,
+           AB011, AB019),
+    p15_fa_scores
+  ) %>%
+  filter(SERV != "PRV") %>%
+  arbol_p15(var_objetivo = "LYC_III")
 
-rpart.plot(p15_with_scores_fit)
+p15_rpart$esfactnoprv_mat <-
+  bind_cols(
+    select(p15, SERV:W_FSTUWT, RFAB, MAT_III,
+           AB001:AB003, AB010, AB012:AB016, AB020, AB033, AB060, AB063, AB064,
+           AB011, AB019),
+    p15_fa_scores
+  ) %>%
+  filter(SERV != "PRV") %>%
+  arbol_p15(var_objetivo = "MAT_III")
 
-p15_with_scores_test$predict <-
-  predict(p15_with_scores_fit, p15_with_scores_test, type = "class")
+# cross_val <- map(1:10, function(x) {
+#   bind_cols(
+#     select(p15, SERV:W_FSTUWT, RFAB, MAT_III,
+#            AB001:AB003, AB010, AB012:AB016, AB020, AB033, AB060, AB063, AB064,
+#            AB011, AB019),
+#     p15_fa_scores
+#   ) %>%
+#     filter(SERV != "PRV") %>%
+#     arbol_p15(var_objetivo = "MAT_III") %>%
+#     {.$prop_correcto_prune}
+# })
 
-mean(p15_with_scores_test$predict == p15_with_scores_test$LYC_G)
-
-prop.table(table(p15_with_scores_test$predict,
-                 p15_with_scores_test$LYC_G), 1) * 100
-
-png("p15_fac.png", width = 1440, height = 900)
-rpart.plot(p15_with_scores_fit, extra = 104)
-dev.off()
-
-file.show("p15_fac.png")
+# Gráficas de los árboles ----
+# Exportemos las gráficas de los modelos
+map(names(p15_rpart), function(modelo_arbol) {
+  png(paste0("p15_rpart_", modelo_arbol, ".png"))
+  rpart.plot(p15_rpart[[modelo_arbol]][["modelo_prune"]], extra = 104)
+  dev.off()
+})
 
 # Ahora toca usar XGboost, o Naive Bayes
 
@@ -328,6 +359,4 @@ file.show("p15_fac.png")
 #            sort = T,
 #            n.var = 15,
 #            main = "Importancia de las variables")
-
-
 
