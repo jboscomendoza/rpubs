@@ -76,6 +76,13 @@ lista_sexto$Raju <-
             model = "1PL", purify = TRUE, p.adjust.method = "holm")
   })
 
+lista_sexto$Logistic <-
+  map(sexto, function(forma){
+    difLogistic(Data = as.data.frame(forma), group = "AB001",
+                focal.name = 2, purify = TRUE, p.adjust.method = "holm")
+
+  })
+
 # Plots DIF ----
 # Resultados por forma
 map(names(lista_sexto), function(metodo) {
@@ -92,11 +99,22 @@ map(names(lista_sexto), function(metodo) {
 map(lista_sexto$Lord, function(forma){
   item_num <- forma$names[forma$DIFitems]
   map(item_num, function(reactivo){
-    png(filename = paste0("plot/icc/", reactivo, ".png"))
+    png(filename = paste0("plot/icc/", reactivo, "_lord.png"))
     plot.Lord(x = forma, plot = "itemCurve", item = reactivo)
     dev.off()
   })
 })
+
+# Curva característica del ítem, resultados del método Logístico
+map(lista_sexto$Logistic, function(forma){
+  item_num <- forma$names[forma$DIFitems]
+  map(item_num, function(reactivo){
+    png(filename = paste0("plot/icc/", reactivo, "_logistic.png"))
+    plot.Logistic(x = forma, plot = "itemCurve", item = reactivo)
+    dev.off()
+  })
+})
+
 
 
 # Resultados reporte ----
@@ -199,3 +217,4 @@ lapply(names(sexto), function(nombre) {
        y = "Proporción") +
   theme_minimal()
 dev.off()
+
