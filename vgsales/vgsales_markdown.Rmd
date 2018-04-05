@@ -1,0 +1,530 @@
+---
+title: "La importancia de explorar nuestros datos - Ventas de videojuegos"
+author: "Juan Bosco Mendoza Vega"
+date: "5 de abril de 2018"
+output: 
+  html_document: 
+    df_print: tibble
+    fig_height: 5.5
+    fig_width: 7.5
+    highlight: tango
+    theme: yeti
+    toc: yes
+---
+
+La exploración de nuestros datos es un paso esencial para cualquier tipo de análisis que deseemos realizar. Si no conocemos la estructura de nuestros datos, sus propiedades y particularidades, después podemos encontrarnos con problemas para analizar, modelar e interpretar resultados.
+
+No importa que tan sofisticada sea una técnica de modelo estadístico o aprendizaje automático, si no sabemos qué le estamos dando para trabajar, difícilmente sabremos qué obtendremos de ellas.
+
+Para este documento utilizaremos datos de ventas de videojuegos y partiremos con una pregunta
+
+* **¿Cuál ha sido la tendencia de ventas de videojuegos en los últimos 20 años?**
+
+Es una pregunta que "sólo" implica describir nuestros datos. No hay predicciones, clasificación ni otras tareas complejas pero, como veremos, darle una buena respuesta implica observación, reflexión y adaptación.
+
+Empecemos preparando nuestro entorno de trabajo.
+
+# Preparación
+Para este análisis usaremos el meta paquete *tidyverse* y el paquete *scales*.
+```{r, message=FALSE}
+library(tidyverse)
+library(scales)
+```
+
+Además definiremos un tema para *ggplot2*. Es *theme_minimal()* con un par de cambios.
+```{r}
+theme_graf <- 
+  theme_minimal() +
+  theme(text = element_text(family = "serif", size = 14),
+        axis.text = element_text(size = 12), 
+        panel.grid.minor = element_blank(),
+        legend.position = "top")
+```
+
+Con esto estamos listos para empezar.
+
+# Descarga y lectura de los datos
+
+Descargamos los datos desde **Kaggle** usando la siguiente dirección (requiere login):
+
+* https://www.kaggle.com/rush4ratio/video-game-sales-with-ratings/downloads/Video_Games_Sales_as_at_22_Dec_2016.csv/2
+
+Una vez descargado el archivo, extraemos su contenido, lo leemos y lo asignamos al objeto vgsales.
+```{r}
+unzip("Video_Games_Sales_as_at_22_Dec_2016.csv.zip")
+
+vgsales <- read_csv("Video_Games_Sales_as_at_22_Dec_2016.csv")
+```
+
+Es importante mencionar que de acuerdo a la documentación de estos datos:
+ 
+ * Sólo están incluídos videojuegos con más de 100 000 unidades vendidas.
+ * Se presenta el total agregado de ventas de un juego, no sólo los del año en que apareció.
+
+Esto último es importante, pues cambia la manera en que interpretamos nuestros resultados. Juegos con más edad tienen la posibilidad de haber vendido unidades durante más de un año.
+
+**Para fines de simplificar este documento, asumiremos que las ventas de un juego ocurren sólo ocurren en el año que fue publicado.**
+
+# Limpieza inicial de los datos
+Usaremos *summary()* para explorar nuestros datos. Veremos las variables que tenemos, de qué clase son y algunas medidas de resumen.
+```{r}
+summary(vgsales)
+```
+
+User_Score y Year_of_Release aparecen como datos de tipo *character*, cuando la lógica nos indica deberían ser ser numéricos. Usemos *table()* para ver que ocurre al interior de estas variables.
+```{r}
+table(vgsales["User_Score"])
+table(vgsales["Year_of_Release"])
+```
+El problema está en que User_Score tiene un valor no númerico, "tbd", mientras que en Year_of_Release los años no disponibles fueron codificados como "N/A". Estas cadenas de texto cambian todos los valores en esas variables a tipo *character()*. 
+
+Para corregirlo, en ambos casos, podemos reemplazar esos datos anomalos por `NA` y convertir a numérico.
+
+Además, aprovechando que haremos modificaciones a los datos, uniformaremos la escala de puntuación de Critic_Score y User_Score. Una de ellas va de 1 a 10, y la otra de 1 a 100. Transformaremos User_Score para que ambas tengan valores de 1 a 100.
+```{r}
+vgsales <-
+  vgsales %>%
+  mutate(
+    User_Score = ifelse(User_Score == "tbd", NA, as.numeric(User_Score)),
+    User_Score = User_Score * 10,
+    Year_of_Release = ifelse(Year_of_Release == "N/A", NA, Year_of_Release),
+    Year_of_Release = as.numeric(as.character(Year_of_Release))
+  ) %>%
+  mutate_if(is.integer, as.numeric)
+```
+
+Ahora pasamos a procesar las variables que más nos interesan: Year_of_Release (fecha de salida del juego) y Global_Sales (ventas mundiales).
+
+# Procesando la fecha de salida
+Como desamos ver cambios a través del tiempo, nos conviene tener completa la información
+de Year_of_Release. Por desgracia, tenemos datos perdidos. Veamos cuántos son.
+```{r}
+# Total perdidos
+sum(is.na(vgsales[["Year_of_Release"]]))
+
+# Proporcion perdidos
+(sum(is.na(vgsales[["Year_of_Release"]])) / length(vgsales[["Year_of_Release"]])) * 100
+```
+
+La proporción de datos perdidos que tenemos es apenas mayor a 1%. Probablemte esto no represente un problema serio, pero hagamos un esfuerzo para quedarnos con la menor cantidad posible de datos perdidos.
+
+Empecemos por buscar patrones en nuestros datos que nos ayuden a llenar esos datos perdidos.
+
+```{r}
+vgsales %>%
+  filter(is.na(Year_of_Release))
+```
+
+## Hora del conocimiento disciplinar
+Por fortuna, tengo un mínimo de conocimiento básico sobre videojuegos, que puedo aprovechar para la tarea de reducir datos perdidos.
+
+En primer lugar, sé que todos los juegos deben tener una fecha de salida para poder venderse. Suena a una observación boba, pero esto quiere decir que todos los datos perdidos en el año de salida de los juegos deben tener un valor verdadero, que desconocemos. `NA` no es un valor que pueda ocurrir en el mundo real.
+
+También es posible reconocer que algunos de los juegos sin año son títulos que aparecieron en varias plataformas, como es el caso de *Rock Band*. Aunque probablemente no siempre sea el caso, podemos asumir que versiones de un mismo juego que ahora no tienen fecha, aparecieron en años similares que las demás versiones.
+
+Por último, hay juegos del género de deportes (Sports) y carreras (Racing) cuyo nombre hace referencia al año en que salieron a la venta. Un ejemplo es *Madden NFL 2004*. En este caso, y de nuevo aplicando el poco conocimiento del tema que tengo, sé que los juegos de deportes con una año en su nombre, en realidad som puestos a la venta el año anterior. Por lo tanto, podríamos introducir el Year_of_Release de *Madden NFL 2004* como 2003.
+
+
+## Versiones de un mismo juego
+Empecemos a aplicar nuestro conocimiento disciplinar imputando los años de versiones de un mismo juego.
+```{r}
+vgsales <-
+  vgsales %>%
+  group_by(Name) %>%
+  mutate(
+    Versions = n(),
+    Imputed_Year = round(median(Year_of_Release, na.rm = T)),
+    Year_of_Release = ifelse(is.na(Year_of_Release), Imputed_Year, Year_of_Release),
+    Year_of_Release = ifelse(is.nan(Year_of_Release), NA, Year_of_Release)
+  ) %>%
+  ungroup()
+```
+
+## Deportes y carreras
+Para los juegos de deportes y carreras, recogeremos información de sus nombres para imputar el año de salida. Esto incluye tomar en cuenta maneras alternas de escribir fechas ("2K6" para referirse a "2006"), así como aquellos que aparecen con una fecha de dos dígitos("99" en lugar de "1999") en lugar de cuatro, que es el formato de Year_of_Release.
+
+Gurdaremos los resultados de este proceso en el objeto *sports_years*.
+```{r}
+sport_years <-
+  vgsales %>%
+  filter(is.na(Year_of_Release)) %>%
+  mutate(year_foo = str_extract(Name, "\\d+$")) %>%
+  filter(!is.na(year_foo) & Genre %in% c("Racing", "Sports")) %>%
+  mutate(
+    year_foo = ifelse(grepl("2K", Name), paste0(200, year_foo), year_foo),
+    year_foo = ifelse(nchar(year_foo) < 2, NA, year_foo),
+    year_foo = ifelse(year_foo %in% 85:99, paste0(19, year_foo), year_foo),
+    year_foo = ifelse(year_foo %in% paste0("0", 1:9), paste0(20, year_foo), year_foo),
+    year_foo = ifelse(year_foo %in% paste0("1", 1:9), paste0(20, year_foo), year_foo),
+    year_foo = ifelse(nchar(year_foo) < 4, NA, year_foo),
+    year_foo = as.numeric(year_foo) - 1
+  ) %>%
+  filter(!is.na(year_foo)) %>%
+  select(Name, year_foo)
+```
+
+Combiamos el objeto anterior con nuestros datos.
+```{r}
+vgsales[vgsales[["Name"]] %in% sport_years[["Name"]], "Year_of_Release"] <-
+  sport_years[["year_foo"]]
+```
+
+Con esto reducimos a más o menos la mitad los datos perdidos en Year_of_Release.
+```{r}
+# Total
+sum(is.na(vgsales[["Year_of_Release"]]))
+# Porcentaje
+sum(is.na(vgsales[["Year_of_Release"]])) / length(vgsales[["Year_of_Release"]])
+```
+
+## La vida de las consolas
+Podemos usar métodos sofisticados para imputar los años faltantes, pero esta ocasión quiero usar un un procedimiento sencillo que, de nuevo, aprovecha lo poco que sé sobre videojuegos.
+
+Sé que los videojuegos de una plataforma (variable Platform) debieron salir a la venta mientras aún se producían juegos para ella, por lo tanto, usaremos la mediana de Year_of_Release como año.
+
+Esto sin duda nos va a dar datos incorrectos, en especial en plataformas que han tenido una vida activa muy larga, como es el caso de PC, pero considerando que
+
+Guardemos en *originales* los juegos con año faltante.
+```{r}
+originales <- vgsales[["Name"]][is.na(vgsales[["Year_of_Release"]])]
+```
+
+Imputemos con la mediana.
+```{r}
+vgsales <-
+  vgsales %>%
+  group_by(Platform) %>%
+  mutate(
+    Year_of_Release = ifelse(Year_of_Release > 2017, 2017, Year_of_Release),
+    Year_of_Release = ifelse(is.na(Year_of_Release), round(median(Year_of_Release, na.rm = T)), Year_of_Release)
+  ) %>%
+  ungroup
+```
+
+Con esto tenemos nuestra variable Year_of_Release sin datos perdidos. Con este método es casi seguro que tendremos datos erroneos en cuanto a año de salida de los juegos, lo cual podría sesgar nuestros resultados.
+
+Sin embargo, en este análisis nos interesa conocer la tendencia de los datos a largo plazo y para este fin tener menos de 1% de errores no debería representar un problema.
+
+Podemos ver cuántos datos hemos imputado por año y que porcentaje representan con respecto al total.
+```{r}
+vgsales %>%
+  group_by(Year_of_Release) %>% 
+  mutate(Total = n()) %>% 
+  filter(Name %in% originales) %>%
+  transmute(Imputado = length(Year_of_Release), Proporcion = (Imputado / Total) * 100) %>% 
+  ungroup() %>% 
+  arrange(Year_of_Release) %>% 
+  distinct()
+```
+El año con el que podríamos tener más problemas es con 2004, por tener 3% de imputaciones con este método, el resto se encuentra alrededor de 1%.
+
+Por supuesto, también podríamos haber omitido estos datos, pero eso es mucho menos interesante.
+
+## Cerrando el análisis a 20 años
+Un paso sencillo pero necesario para limitar nuestro análisis a ventas de los últimos 20 años que tenemos datos.
+```{r}
+vgsales <- 
+  vgsales %>% 
+  filter(Year_of_Release %in% 1996:2016)
+```
+
+
+# Procesando las ventas globales
+Ahora procesaremos la columna Global_Sales, que contiene el total de ventas de cada juego. Esta variable no tiene problema de datos perdidos, así que procedamos a ver su distribución.
+```{r}
+vgsales %>%
+  ggplot() +
+  aes(Global_Sales) +
+  geom_density() +
+  scale_x_continuous(expand = c(0, 0), breaks = seq(0, 85, by = 5)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme_graf
+```
+
+Tenemos una distribución con datos extremos (outliers), que en este caso deben ser juegos con ventas inusualmente altas que le dan forma a nuestra distribución de una curva alta, delgada y con una cola a la derecha muy larga.
+
+Viendo la distribución ahora sabemos que la mayoría de los juegos tuvieron ventas por debajo de 5 millones, sin embargo, hay por lo menos un dato de más de 80. 
+
+Estos es importante considerarlos en nuestro análisis.
+
+Veamos los deciles de nuestra distribución para entenderla mejor.
+```{r}
+quantile(vgsales[["Global_Sales"]], probs = seq(0, 1, by = .1))
+```
+
+El 90% de los juegos tuvieron ventas globales de menos de 1.15 millones. Esto hace interesante al 10% superior en ventas globales. Veamoslo de cerca.
+```{r}
+quantile(vgsales[["Global_Sales"]], probs = seq(.9, 1, by = .01))
+```
+
+Si quitamos ese 10% superior, la ditribución luce muy diferente.
+```{r}
+vgsales %>%
+  #filter(Global_Sales < 3.5198) %>%
+  filter(Global_Sales < 1.1500) %>%
+  ggplot() +
+  aes(Global_Sales) +
+  geom_density() +
+  scale_x_continuous(expand = c(0, 0), breaks = seq(0, 4, by = .5)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme_graf
+```
+
+## Una nueva pregunta
+Esta distribución de datos es peculiar. Me lleva a preguntarme ¿Qué tantas ventas aportan los juegos más vendidos de todos? ¿Que tan diferentes son las ventas de es ese 10% superior con respecto al resto de los juegos?
+
+Además, dentro de ese 10% superior, a partir del 3% superior el número de ventas se incrementa considerablemente, lo que me hace sospechar que ese grupo de juegos es también diferente a todos los demás.
+
+Exploremos estas ideas.
+
+## El 10% superior
+Veamos cuantos juegos representaron el 10% y 3% superior de 1996 a 2016.
+```{r}
+vgsales %>%
+  mutate(Tipo = case_when(
+    Global_Sales >= 3.5198 ~ "3% superior",
+    Global_Sales >= 1.15 ~ "10% superior",
+    TRUE ~  "Resto de ventas"
+  )) %>%
+  count(Tipo) %>%
+  ggplot() +
+  aes(Tipo, n, fill = Tipo) +
+  geom_col() +
+  scale_y_continuous(expand = c(0, 0), breaks = seq(0, 20000, by = 2000),
+                     label = comma_format())  +
+  scale_x_discrete(expand = c(0, 0)) +
+  theme_graf +
+  theme(legend.position = "none")
+```
+
+El 10% superior son menos de 2,000.
+
+Ahora veamos cuantas ventas han hecho estos juegos de 1996 a 2016.
+```{r}
+vgsales %>%
+  mutate(Tipo = case_when(
+    Global_Sales >= 3.5198 ~ "3% superior",
+    Global_Sales >= 1.15 ~ "10% superior",
+    TRUE ~  "Resto de ventas"
+  )) %>%
+  group_by(Tipo) %>%
+  summarize(Ventas = sum(Global_Sales)) %>%
+  ungroup() %>%
+  mutate(Prop = Ventas / sum(Ventas)) %>%
+  ggplot() +
+  aes(Tipo, Prop, fill = Tipo)  +
+  geom_col() +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, .45),
+                     labels = percent_format()) +
+  scale_x_discrete(expand = c(0, 0)) +
+  theme_graf +
+  theme(legend.position = "none")
+```
+
+Ese 10% superior ha hecho más de la mitad de las ventas totales durante los últimos veinte años y el 3% superior un tercio del total. Esto es interesante, nos habla un poco de la importancia que pueden tener estos juegos al analizar las tendencias de ventas.
+
+Esto nos lleva entonces a preguntarnos ¿de qué manera este 10% superior ha influido en las tendencias de ventas de videojuegos en los último años?
+
+## Etiquetando el 10% superior
+Para analizar a este 10% superior crearemos una columna para etiquetar los datos que correspondan a esta categoría.
+
+Podríamos etiquetar los datos usando los cuantiles calculados a partir de las ventas de 1996 a 2016, pero esto nos dejaría sin la posibilidad de observar tendencias anuales. La cantidad de ventas necesarias para estar en el  10% de juegos más vendidos seguramente variará año con año y poder ver estas variaciones sería interesante.
+
+Por lo tanto, calcularemos para cada año cuales fueron los juegos que estuvieron en el 10% superior y el 3%  superior de ventas. Con esta información crearemos una variable para etiquetar a los juegos que pertenecen a estas categorías. Además, llamaremos "Resto de ventas" al resto de los juegos.
+```{r, warning=FALSE}
+vgsales <-
+  vgsales %>%
+  group_by(Year_of_Release) %>%
+  mutate(
+    Tipo = Hmisc::cut2(Global_Sales,
+                          quantile(Global_Sales, probs = c(.9, .97))),
+    Tipo = as.numeric(as.factor(Tipo)),
+    Tipo = case_when(
+      Tipo == 3 ~ "3% superior",
+      Tipo == 2 ~ "10% superior",
+      Tipo == 1 ~ "Resto de ventas"
+    ),
+    Tipo = factor(Tipo, levels = c("3% superior", "10% superior", "Resto de ventas"))
+  )
+```
+
+Veamos los resultados de esta transformación por año, para verificar que no hemos tenido errores de etiquetado.
+```{r}
+vgsales %>% 
+  count(Year_of_Release, Tipo) %>% 
+  ggplot() +
+  aes(Year_of_Release, n, fill = Tipo) +
+  geom_bar(stat = "identity", position = "stack", width = 1) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_continuous(breaks = seq(1996, 2016, by = 2)) +
+  theme_graf
+  
+```
+
+Todo luce bien y con esto, por fin, ha llegado el momento de analizar las ventas de 1996 a 2016.
+
+# Las ventas a través del tiempo
+Empecemos con la pregunta más obvia. ¿Cuántos videojuegos han sido vendidos por año?
+```{r}
+vgsales %>%
+  group_by(Year_of_Release) %>%
+  summarize(Ventas = sum(Global_Sales)) %>%
+  ggplot() +
+  aes(Year_of_Release, Ventas)  +
+  geom_line() +
+  geom_point(shape = 19) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_continuous(breaks = seq(1996, 2016, by = 2)) +
+  theme_graf
+```
+A partir del 200 las ventas de videojuegos aumentaron hasta llegar a su punto más alto en el 2008, después de ese año las ventas se redujeron cada año hasta alcanzar su punto más bajo en el 2016.
+
+Lo anterior coincide con el número de juegos que han sido publicados en en cad año. Los años con más ventas, son los años con más juegos publicados.
+
+Podemos ver la aportación de cada tipo de juego al total de ventas.
+```{r}
+vgsales %>%
+  group_by(Year_of_Release, Tipo) %>%
+  summarize(Ventas = sum(Global_Sales)) %>%
+  ggplot() +
+  aes(Year_of_Release, Ventas, fill = Tipo)  +
+  geom_area() +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_continuous(breaks = seq(1996, 2016, by = 2)) +
+  theme_graf
+```
+
+La aportación del 10% superior y el 3% superior a las ventas de cada año ha sido considerable de 1996 al 2016. De manera similar a como vimos con las ventas acumuladas de estos 20 años, parece que cada año los juegos del 10% superior representan la mitad de todas las unidad vendidas.
+
+Podemos observar esta aportación a las ventas visualizando la proporción que cada tipo de juego aporta a las ventas globales por año.
+```{r}
+vgsales %>%
+  group_by(Year_of_Release, Tipo) %>%
+  summarize(Ventas = sum(Global_Sales)) %>%
+  group_by(Year_of_Release) %>%
+  mutate(Prop = Ventas / sum(Ventas)) %>%
+  ggplot() +
+  aes(Year_of_Release, Prop, fill = Tipo) +
+  geom_area()  +
+  scale_y_continuous(expand = c(0, 0), labels = percent_format(),
+                     breaks = seq(0, 1, by = .1)) +
+  scale_x_continuous(limits = c(1996, 2017), breaks = seq(1996, 2016, by = 2)) +
+  theme_graf
+```
+
+En los últimos 20 años, cada año, el 10% superior de los juegos ha sido el responsable de más de la mitad de las ventas totales, en algunos casos, como en el 2006, la aportación ha sido de hasta el 70%. Sobresale que el top 3% superior ha contribuido entre el 30 y 40% de todas las ventas cada año.
+
+Para contextualizar mejor estos resultados, visualicemos cuántos juegos por año han pertenecido a la categoría de 10% superior y 3% superior.
+```{r}
+vgsales %>%
+  group_by(Year_of_Release, Tipo) %>%
+  transmute(Ventas = sum(Global_Sales), Conteo = n()) %>%
+  distinct() %>%
+  group_by(Year_of_Release) %>%
+  mutate(Prop = Ventas / sum(Ventas)) %>%
+  ggplot() +
+  aes(Year_of_Release, Prop, fill = Tipo) +
+  geom_col(width = 1) +
+  geom_text(aes(label = round(Conteo, 2)), position = position_stack(.5), size = 3) +
+  scale_y_continuous(expand = c(0, 0), labels = percent_format()) +
+  scale_x_continuous(expand = c(0, 0), breaks = seq(1996, 2016, by = 2)) +
+  theme_graf
+```
+
+A finales de los 90s, menos de de 50 juegos por año eran responsables de más de la mitad de todas las ventas de videojuegos. Del 2000 en adelante, conforme aumentó el número de juegos que aparecían cada año, también aumentó la cantidad de juegos en el 10% superior y 3%, entre 80 y 140 juegos. 
+
+A partir del 2012, que inició la reducción de juegos publicados, esta categoría también disminuyó en tamaño, para tener entre 60 y 70 títulos.
+
+Esto es consistente con lo que habíamos observado hasta ahora.
+
+# Ventas en promedio
+Como la cantidad de juegos que se publicaron cada año ha cambiado de 1996 a 2016, necesitamos una medida menos sesgada que el número total de ventas para identificar tendencias.
+
+Para este fin, utilizaremos el promedio de ventas por juego, por año.
+```{r}
+vgsales %>%
+  group_by(Year_of_Release) %>%
+  summarise(Media_Ventas = mean(Global_Sales)) %>%
+  ggplot() +
+  aes(Year_of_Release, Media_Ventas) +
+  geom_line() +
+  geom_point(shape = 19) +
+  scale_y_continuous(expand = c(0, 0), breaks = seq(0, 2, by = .1)) +
+  scale_x_continuous(breaks = seq(1996, 2016, by = 2)) +
+  theme_graf
+```
+
+Esta tendencia es diferente a la observada por ventas globales. Empieza relativamente alta en 1996, disminuye hasta encontrar estabilidad alrededor del 2004, tiene un pico entre 2012 y 2014, para terminar en su punto más bajo en el 2016.
+
+En otras palabras, en los años que más videojuegos se publicaron, el promedio de ventas se mantuvo estable. Se vendían más juegos, pero cada juego vendía, en promedio, lo mismo que en años anteriores. Curiosamente, cuando empiezan a publicarse menos juegos por año, se incrementaron las ventas promedio por juego.
+
+En lo que coinciden las tendencias de ventas globales y ventas en promedio es que el 2016 es el punto más bajo de los últimos veinte años.
+
+Sin embargo, sabemos que las ventas entre los distintos tipos de juego son muy diferentes, por lo que nos conviene ver por separado el promedio de ventas de los juegos en el 10% superior, el 3% superior y los demás.
+```{r}
+vgsales %>%
+  group_by(Year_of_Release, Tipo) %>%
+  summarise(Media_Ventas = mean(Global_Sales)) %>%
+  ggplot() +
+  aes(Year_of_Release, Media_Ventas, color = Tipo) +
+  geom_line() +
+  geom_point(shape = 19) +
+  scale_y_continuous(expand = c(0, 0), breaks = seq(0, 10, by = 2)) +
+  scale_x_continuous(breaks = seq(1996, 2016, by = 2)) +
+  theme_graf
+```
+
+La gráfica anterior da la impresión de que el 3% superior tuvo los cambios más extremos de todos los grupos, pero esto se debe a la escala en la que se presentan los datos.
+
+Si queremos comparar los cambios entre los distintos tipos de juegos al mismo tiempo, necesitamos convertir sus datos a una escala en común. Para esto los estandarizaremos para que estén en el rango 0 a 1.
+```{r}
+vgsales %>%
+  group_by(Year_of_Release, Tipo) %>%
+  summarise(Media_Ventas = mean(Global_Sales)) %>%
+  group_by(Tipo) %>% 
+  mutate(
+    Media_Ventas = (Media_Ventas - (min(Media_Ventas))) / (max(Media_Ventas) - min(Media_Ventas))
+) %>%
+  ggplot() +
+  aes(Year_of_Release, Media_Ventas, color = Tipo) +
+  geom_line() +
+  geom_point(shape = 19) +
+  scale_x_continuous(breaks = seq(1996, 2016, by = 2)) +
+  theme_graf
+```
+
+Efectivamente, el 3% superior ha tenido los cambios más notables en su tendencia durante los últimos 20 años, en particular tuvo altibajos considerables de 1996 al 2006. 
+
+Por su parte, la tendencia de los juegos en el 10% superior y todos los demás ha sido más o menos similar y entre el 2006 y el 2008, la tendencia del 3% superior 
+
+# ¿Entonces cuál es la tendencia? Resultados del análisis
+
+Desde 1996 las ventas de videojuegos se incrementaron año con año hasta alcanzar su punto más alto en el 2008, y a partir de este año las ventas se redujeron duarante los siguientes ocho años, hasta alcanzar su punto más bajo en el 2016. Sin embargo, esta no es toda la historia.
+
+En realidad, el promedio de ventas por juego se ha reducido gradualmente desde 1996 y aunque del 2011 al 2013 este promedio aumentó considerablemente, a partir del 2014 la tendencia a la baja continuó.
+
+¿Cómo puede ser entonces que el total de ventas de videojuegos aumente, pero el promedio de ventas por juego disminuya? Esto se debe a dos factores.
+
+El primero y más evidente, es el número de juegos distintos que aparecen cada año. Si aparecen más juegos, habrá más ventas.
+
+Pero, además, las ventas de un año se ven influenciadas por el total de unidades vendidas que tienen los juegos en el 10% superior de ventas cada año. El 10% superior ha representado de manera consistente más de la mitad de las ventas de 1996 a 2016. En otras palabras, uno de estos juegos puede llegar a vender tanto como nueve juegos comunes.
+
+El caso más extremos de este comportamiento se encuentra en el 3% superior de ventas, que han representado un 30% de las ventas cada año de 1996 al 2016.
+
+Es decir, de cada 100 juegos vendidos, 30 son juegos que pertenecen al 3% superior.
+
+Por lo tanto, si este 10% superior y en particular el 3% superior tienen un buen año, esto se verá reflejado en el total de unidades vendidas, aunque en promedio el resto de los juegos esten vendiendo menos que en años anteriores.
+
+Lo que sí es evidente es que a partir del 2014 las ventas de videojuegos se han reducido, no solo en volumen, sino también en promedio de ventas por juego. Este es un fenómeno que requiere ser analizado con más detalle.
+
+# Para cerrar
+Como hemos visto, explorar nuestros datos es una etapa esencial de un análisis. Nos ayuda a entender mejor nuestros datos y en este proceso, puede generar preguntas nuevas y relevantes.
+
+Quizás decir que estas explorando datos no suena tan glamoroso o intrincado como decir que estas ejecutando un modelo de predicción, pero en ocasionaes es más que suficiente para obtener información valiosa.
+
+---
+
+Dudas, comentarios y correcciones son bienvenidas:
+jboscomendoza@gmail.com
+
+El código usado en este documenta se encuentra en Github:
