@@ -120,7 +120,7 @@ hacer_bayes <- function(tabla, usuario) {
 set.seed(1988)
 bayes_cmll <- hacer_bayes(tuits_df, "CMLL_OFICIAL")
 
-bayes_cmll[["mat"]]
+bayes_cmll[["matriz"]]
 
 bayes_cmll[["sets"]][["train"]]
 bayes_cmll[["sets"]][["test"]]
