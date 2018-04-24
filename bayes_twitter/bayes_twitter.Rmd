@@ -1,0 +1,384 @@
+---
+title: "Naïve Bayes en R para clasificacion de texto"
+author: "Juan Bosco Mendoza Vega"
+date: "10 de abril de 2018"
+output: 
+  html_document: 
+    df_print: tibble
+    fig_height: 5.5
+    fig_width: 7.5
+    highlight: tango
+    theme: yeti
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+En este artículo revisaremos como implementar el Naïve Bayes (clasificador Bayesiano ingenuo) para clasificar texto usando R. Naïve Bayes es un algoritmo de aprendizaje automático basado en el teorema de Bayes que aunque es sencillo de implementar, tiende a dar buenos resultados.
+
+Usaremos un conjunto de datos sencillo, obtenido con la API de Twitter, que consta de 1349 tuits, acompañados de su nombre de usuario e identificador de tuit. Estos tuits fueron obtenidos el 9 de Abril del 2018.
+
+Nuestro objetivo será determinar si un tuit en particular fue hecho por un usuario específico o no, a partir de su contenido. Los datos que usaremos contienen tuits que pertenecen a cuatro cuentas, mezclados con tuits de multiples usuarios.
+
+* @lopezobrador - Andrés Manuel Lopez Obrador, candidato a la presidencia de México.
+* @UNAM_MX - Universidad Nacional Autónoma de México, cuenta institucional.
+* @CMLL_OFICIAL - Consejo Mundial de Lucha Libre, promoción de lucha libre de México.
+* @MSFTMexico - Microsoft México, cuenta corporativa.
+
+Además, veremos cómo podemos sistematizar la implementación de este algoritmo en R.
+
+Pero antes de empezar...
+
+# Una explicación informal de Naïve Bayes
+La idea de Naïve Bayes es sencilla, pero efectiva. Usamos las probabilidades condicionales de las palabras en un texto para determinar a qué categoría pertenece, estas calculadas con el teorema de Bayes.
+
+Por ejemplo, si deseamos clasificar reseñas de un servicio en dos categorías, "positiva" y "negativa", tenemos que determinar qué palabras es más probable encontrar en cada una de ellas. Podemos imaginar que es más probable que una reseña pertenezca a la categoría "positiva" si contiene palabras como "bueno" o "excelente", y menos probable si contiene palabras como "malo" o "deficiente.
+
+Entonces podemos decir: ¿cuál es la probabilidad de que una reseña pertenezca a la categoría "positiva", dado que contiene la palabra "bueno"? De manera sencilla: `p(positiva|bueno)`
+
+Este algoritmo es llamado "ingenuo" porque calcula las probabilidades condicionales de cada palabra por separado, como si fueran independientes una de otra. 
+En lugar de calcular la probabilidad condicional de que una reseña pertenezca a la categoría "positiva", dado que contiene la palabra "bueno", y dado que contiene la palabra "servicio", y dado que contiene la palabra "familia", y así sucesivamente para todas las palabras de la reseña; lo que hacemos es calcular la probabilidad condicional de cada palabra, asumiendo de manera "ingenua" que en esta probabilidad no importa cuales palabras le acompañan.
+
+Una vez que tenemos las probabilidades condicionales de cada palabra en una reseña, calculamos la probabilidad conjunta de todas ellas, mediante un producto \Pi, para determinar la probabilidad de que pertenezca a la categoría "positiva". Luego hacemos lo mismo para cada reseña que tengamos hasta clasificarlas todas.
+
+Una explicación formal se encuentra en el siguiente enlace
+
+* https://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html
+
+Ahora sí, comencemos.
+
+# Preparando nuestro entorno.
+Estos son los paquetes que usaremos en esta ocasión. Si no los tienes instalados, ejecuta primero `install.packages()`, como de costumbre. La implementación de Naïve Bayes que usaremos será la del paquete **naivebayes**.
+```{r, message=FALSE}
+library(tidyverse)
+library(tidytext)
+library(naivebayes)
+library(tm)
+library(caret)
+```
+
+# Descarga y lectura de datos
+Descargamos los datos de la siguiente dirección:
+
+* https://raw.githubusercontent.com/jboscomendoza/rpubs/master/bayes_twitter/tuits_bayes.csv
+
+```{r, eval=FALSE}
+download.file(url = "https://raw.githubusercontent.com/jboscomendoza/rpubs/master/bayes_twitter/tuits_bayes.csv", destfile = "tuits.csv")
+
+```
+
+Usamos `read.csv()` para leer nuestros datos. Podríamos usar `read_csv()` de readr, pero esa función no tiene la opcion para leer texto usando una codificación específica. Para nuestros datos, necesitamos que las tildes, la ñ y otros caracteres especiales propios del español sean mostrados correctamente, por tanto es importante usar la codificación de texto correcta, que definimos con el argumento `fileencoding`.
+```{r}
+tuits_df <-
+  read.csv("tuits_bayes.csv", stringsAsFactors = F, fileEncoding = "latin1") %>%
+  tbl_df
+```
+
+
+# Procesamiento de los datos
+Vamos a definir una función para quitar URLs. En nuestros datos todos los URLs han sido  acortados, por lo que dificilmente obtendremos información relevante de de ellos por ser series de caracteres sin mucho significado.
+
+La función siguiente usa **regexp** para detectar palabras que empiecen con "http" y las  eliminará.
+```{r}
+quitar_url <- function(texto) {
+    gsub("\\<http\\S*\\>|[0-9]", " ", texto)
+}
+```
+
+# Creación de matriz dispersa
+Para clasificar texto usando Naïve Bayes necesitamos que nuestros datos tengan estructura específica: 
+
+* Cada renglon debe corresponder a un texto específico.
+* Cada columna debe corresponder a una palabra. 
+* En las celdas debe indicarse si una palabra aparece en un texto específico. 
+
+Para ilustrar esta estructura, veamos un ejemplo sencillo. Partimos de un data frame, muy parecido a nuestros datos:
+```{r, echo=FALSE}
+data.frame(
+  "id" = 1:3, 
+  "texto" = c("este es un texto de ejemplo", "texto distinto, distinto contenido", "conjunto de palabras nuevo"), 
+  stringsAsFactors = F
+)
+```
+
+Al convertir lo anterior a una matriz dispersa, luce así;
+```{r, echo=FALSE}
+data.frame(
+  "id" = 1:3, 
+  "texto" = c("este es un texto de ejemplo", "texto distinto, distinto contenido", "conjunto de palabras nuevo"), 
+  stringsAsFactors = F
+) %>%
+  unnest_tokens(input = "texto", output = "palabra") %>%
+  count(id, palabra) %>%
+  spread(key = palabra, value = n)
+```
+
+En sentido estricto, para que esta fuera una matriz dispersa, en lugar de `NA` en las celdas deberían aparecer ceros. El nombre de **dispersa** se refiere a que es una matriz con pocas  celdas llenas con datos distintos a 0. Sin embargo, para nuestros fines, una matriz como la anterior funcionará.
+
+Nuestros datos lucen así:
+```{r}
+tuits_df
+```
+
+Entonces para convertir nuestros datos a una matriz dispersa necesitamos:
+
+1. Segmentar cada tuit por palabras.
+2. Contar cuantas veces aparce cada palabra por tuit.
+3. Dar formato de matriz "ancha".
+
+Lo anterior lo realizamos con las siguientes funciones:
+
+1. `unnest_tokens()` del paquete *tidytext*. Segmentamos una variable por palabras, creando una nueva columna con ellas.
+2. `count()` de *dplyr*. Ya que tenemos las palabras en una columna, contamos cuántas veces aparecen por tuit.
+3. `spread()` de *tidyr*. Los pasos anteriores nos dejan con datos "altos", pues tendremos tantos renglones como palabras, pero buscamos tener tantas columnas como palabras. Con esta función pasamos de un formato "alto" de datos a uno "ancho".
+
+Veamos lo anterior en acción:
+```{r}
+tuits_df %>%
+  unnest_tokens(input = "text", output = "palabra") %>%
+  count(screen_name, status_id, palabra) %>%
+  spread(key = palabra, value = n)
+```
+
+Obenemos un objeto con 1348 renglones (uno por tuit) y 8 571 columnas (una por palabra en nuestros datos).
+
+Este proceso lo realizaremos varias veces, así que nos conviene definir una función. De paso, aprovechamos para introducir en ella el proceso el quitar los URLs y la columna status_id, que no es necesaria para el resto del análisis.
+```{r}
+crear_matriz <- function(tabla) {
+  tabla %>%
+    mutate(text = quitar_url(text)) %>%
+    unnest_tokens(input = "text", output = "palabra") %>%
+    count(screen_name, status_id, palabra) %>%
+    spread(key = palabra, value = n) %>%
+    select(-status_id)
+}
+```
+
+Con esto tenemos nuestros datos listos para el análisis
+
+# Ajustando Naïve Bayes
+Crearemos un modelo de predicción para determinar si un tuit pertenece a un usuario específico. Para esta prueba, intentaremos predecir si un tuit fue hecho por la cuenta **@MSFTMexico** o no. Dado que no nos interesa a qué categoría pertenecen los demás tuits, etiquetaremos todos los tuits que no pertenecen a esta cuenta como **"Otro"**.
+
+Aunque Naïve Bayes puede hacer clasificaciones con múltiples categorías, conviene empezar con un ejemplo de clasificación binaria.
+
+ Recodificamos nuestra variable objetivo, **screen_name**, y creamos nuestra matriz dispersa con las funciones `mutate()` de *dplyr* e `ifelse()` de *base*. Aprovechamos para convertir nuestra variable objetivo a factor, que es el tipo de datos más compatible con la implementación de Naïve Bayes que usaremos.
+```{r}
+ejemplo_matriz <-
+  tuits_df %>%
+  mutate(screen_name = ifelse(screen_name == "MSFTMexico", screen_name, "Otro"),
+         screen_name = as.factor(screen_name)) %>%
+  crear_matriz
+```
+
+Como haremos varias clasificaciones más adelante, es definimos una función para realizar la recodificación fácilmente.
+```{r}
+elegir_usuario <- function(nombres, usuario) {
+  as.factor(ifelse(nombres %in% usuario, nombres, "Otro"))
+}
+```
+
+# Sets de entrenamiento y prueba (training y test)
+Cuando creamos un modelo de clasificación necesitamos un diagnósito de qué tan bien está haciendo su trabajo. Para este fin dividiremos nuestros datos en dos sets (conjuntos), uno de entrenamiento (train) y uno de de prueba (test).
+
+Con el set de entrenamiento **ajustaremos** nuestro modelo, en este caso, determinando las probabilidades condicionales de cada palabra, para cada categoría. Después, aplicamos este modelo en nuestro set de prueba para analizar cuántos de nuestros casos fueron clasificados correctamente.
+
+Dividiremos nuestros datos de modo que tengamos 70% de ellos en el set de entrenamiento y el resto en el set de prueba. Usaremos la función `sample_frac()` de *dplyr* para obtener una muestra al azar de nuestros datos y despues `setdiff()` del mismo paquete para obtener su complemento. Para que el ejemplo sea reproducible, usaremos `set.seed()` de *base* antes de obtener el primer set.
+```{r}
+set.seed(2001)
+ejemplo_entrenamiento <- sample_frac(ejemplo_matriz, .7)
+ejemplo_prueba <- setdiff(ejemplo_matriz, ejemplo_entrenamiento)
+```
+
+También definimos una función para crear sets de entrenamiento y prueba, que nos serán devueltos en forma de lista.
+```{r}
+crear_sets <- function(tabla, prop = .7) {
+  lista_sets <- list()
+  lista_sets$train <- sample_frac(tabla, prop)
+  lista_sets$test  <- setdiff(tabla, lista_sets[["train"]])
+
+  lista_sets
+}
+```
+
+Ha llegado la hora de la verdad.
+
+# Usando la función naive_bayes
+Para ajustar nuestro modelo usamos la función `naive_bayes()` del paquete *naivebayes* con nuestro set de entrenamiento. Esta función nos pide como argumentos la variable objetivo para clasificar y los datos que serán usados. 
+
+Especificamos la variable objetivo como una formula: **screen_name ~ .** 
+
+De esta manera estamos expresando que la variable *screen_name* será el objetivo o variable dependiente, y todas las demás variables **(.)** serán los predictores o variables independientes. No ajustaremos ningún otro parámetro de la función `naive_bayes()` para este ejemplo.
+```{r}
+ejemplo_modelo <- naive_bayes(formula = screen_name ~ .,  data = ejemplo_entrenamiento)
+```
+Esperamos un poco en lo que hace su trabajo ¡Y eso es todo! Con esto ya tenemos un objeto que contiene nuestro modelo de predicción de Naïve Bayes, el cual podemos usar para hacer predicciones.
+
+# Haciendo predicciones con nuestro modelo
+Para hacer predicciones con nuestro modelo usamos la función `predict()` de *base*. Esta función nos pide un modelo y datos nuevos, que en nuestro caso son el set de prueba.
+```{r}
+ejemplo_prediccion <- predict(ejemplo_modelo, ejemplo_prueba)
+```
+
+Como resultado obtenemos un vector con los valores de **screen_name** que han sido predichos por nuestro modelo.
+```{r}
+head(ejemplo_prediccion, 25)
+```
+
+Para analizar qué tanto éxito hemos tenido, creamos una matriz de confusión usando la función `confusionMatrix()` de *caret*, que es muy similar en su sintaxis a `table()` de *base*. No pide dos argumentos, el vector con las predicciones y los valores reales de screen_name.
+
+Con esta matriz podremos analizar la precisión de nuestras predicciones y  algunas medidas de ajuste.
+```{r}
+confusionMatrix(ejemplo_prediccion, ejemplo_prueba[["screen_name"]])
+```
+
+¡Excelente! 92% de precisión (Accuracy) no está nada mal para un modelo al que no hemos hecho ningún ajuste particular. Clasificamos correctamente cerca de nueve de cada diez casos.
+
+Sin embargo, nos conviene dar un vistazo rápido a algunas de las medidas que nos ofrece `confusionMatrix()`, pues la medida de precisión por sí misma puede ser engañosa. Veamos con más detalle la información que nos da.
+
+# Interpretando la matriz de confusión
+Primero, tenemos tabla de confusión, propiamente dicha. En ella lo primero que nos interesa observar son las celdas en las que se cruzan los valores predichos (**MSFTMExico**) contra los de referencia. Es decir, el número en la celda en las que cruza el renglón MSFTMexico y la columna MSFTMexico corresponde a la cantidad de casos clasificados correctamente en esa categoría.
+
+De 53 casos que eran MSFTMexico en el set de prueba, clasificamos correctamente 40, es decir, tuvimos una **Sensibilidad** (Sensitivity) de **75.47%**. De manera complementaria, de 335 casos que eran Otro, clasificamos correctamente 319, esto es, **95.22%** de **Especificidad** (Specificity). En otras palabras, tuvimos más éxito clasificando a la categoría Otro que MSFTMexico.
+
+Otra medida útil es el estadístico **Kappa**. Este nos da una medida de qué tanto mejora nuestro modelo una predicción, contra las probabilidades observadas.
+
+Por ejemplo, supongamos que tenemos un conjunto de datos donde 50% de ellos pertenecen a la clase A y el otro 50% a la B. Esto quiere decir que, por azar, clasificaríamos correctamente 50% de los casos en nuestros datos como A, pues esta es su probabilidad esperada. Un modelo que tenga 50% de clasificaciones correctas, no estaría mejorando nuestra capacidad de predicción más allá del azar. Un modelo tendría que clasificar correctamente más del 50% de los casos para considerarse una mejora sobre la probabilidad esperada.
+
+Entre más cercano a 1 es el valor de Kappa, nuestro modelo es mejor para  predecir que la probabilidad esperada. Qué valor de Kappa consideremos ideal depende del contexto de nuestro análisis, pero en general, valores arriba de **0.6** se consideran "buenos".
+
+El **valor predictivo positivo** (Pos Pred Value) indica la probabilidad de que un dato que ha sido predicho como perteneciente a nuestra categoría "positiva", realmente pertenezca a ella ('Positive' Class : MSFTMexico, en este ejemplo). En este caso, la probabilidad es de **71.43%**. Por complemento, el **valor predictivo negativo** (Neg Pred Value) indica la probabilidad de que un dato predicho como perteneciente a la categoría negativa ("Otro"), en efecto pertenezca a ella. Esta fue de **96.08%**.
+
+Finalmente, la **precisión balanceada**, indica qué tan bien predice nuestro modelo tanto a la categoría positiva, como a la negativa. Esto es muy importante con datos como los nuestros, en los que tenemos clases no balanceadas, es decir, que una es más abundante y tiene más probabilidades de aparecer que la otra. En conjuntos de datos como estos, es fácil obtener una precisión alta para la clase más probable, aunque tengamos poca para la clase menos probable.
+
+Nuestra precisión balanceada es de 85.35% lo cual no está mal, aunque podría mejorar.
+
+# Resultados
+Considerando todo lo anterior, podemos concluir que tenemos una buena precisión en nuestras predicciones, con más éxito para clasificar "Otro" que  "MSFTMExico" y que nuestro modelo en efecto mejora la predicción con respecto a la probabilidad esperada.
+
+Pero aún no hemos terminado.
+
+# Funciones para facilitar el análisis
+El paso anterior puede simplificarse, de modo que sea más fácil realizar análisis posteriores.
+
+Para ello definimos una función para ajustar Naïve Bayes y obtener predicciones, a partir de un lista con datos de entrenamiento y de prueba. Esta función nos devolvera una lista con el modelo y sus predicción.
+```{r}
+obtener_bayes <- function(lista_sets, objetivo = "screen_name") {
+  bayes_formula<- as.formula(paste0(objetivo, "~ .") )
+  bayes <- list()
+
+  bayes$modelo <- naive_bayes(formula = bayes_formula, data = lista_sets[["train"]])
+  bayes$prediccion   <- predict(object = bayes$modelo, newdata = lista_sets[["test"]])
+
+  bayes
+}
+```
+
+También definimos una función para obtener matrices de confusión, a partir de la lista que devuelve la función anterior.
+```{r}
+mat_conf <- function(resultado, set_test) {
+  confusionMatrix(resultado[["prediccion"]], set_test[["test"]][["screen_name"]])
+}
+```
+
+También ws posible crear gráficas a partir de las matrices de confusión, usando el elemento **table** que devuelve la función `confusionMatrix`.
+```{r}
+ejemplo_conf <- confusionMatrix(ejemplo_prediccion, ejemplo_prueba[["screen_name"]])
+plot(ejemplo_conf[["table"]])
+```
+
+Así que taambien definimos una función para graficar matrices de confusión a partir de la lista de resultados que nos devuelve la función `obtener_bayes`.
+```{r}
+plot_conf <- function(resultados_bayes) {
+  plot(resultados_bayes[["confusion"]][["table"]],
+       col = c("#00BBFF", "#FF6A00"),
+       main = resultados_bayes[["confusion"]][["positive"]])
+}
+```
+
+Ahora, ha llegado el momento de integrar lo que hemos hecho hasta ahora.
+
+# Sistematizando nuestro análisis
+Integrando los pasos anteriores y las funciones que hemos definido para realizarlos, podemos definir una función para implementar Naïve Bayes.
+```{r}
+hacer_bayes <- function(tabla, usuario) {
+  ingenuo <- list()
+
+  ingenuo[["matriz"]] <-
+    tabla %>%
+    mutate(screen_name = elegir_usuario(screen_name, usuario)) %>%
+    crear_matriz()
+
+  ingenuo[["sets"]] <- crear_sets(ingenuo[["matriz"]])
+
+  ingenuo[["resultado"]] <- obtener_bayes(ingenuo[["sets"]])
+
+  ingenuo[["confusion"]] <- list()
+
+  ingenuo[["confusion"]] <- mat_conf(ingenuo[["resultado"]], ingenuo[["sets"]])
+
+  ingenuo
+}
+```
+
+Veamos como funcionaría nuestra función. Intentaremos clasificar los tuits de la cuenta **@CMLL_OFICIAL**. Una vez más usamos `set.seed()` para hacer reproducible este ejemplo.
+```{r}
+set.seed(1988)
+bayes_cmll <- hacer_bayes(tuits_df, "CMLL_OFICIAL")
+```
+
+De lo anterior  obtenemos una lista con:
+
+* Un data frame con la matriz dispersa.
+```{r}
+bayes_cmll[["mat"]]
+```
+
+* Una lista con los sets de entrenamiento y prueba.
+```{r}
+bayes_cmll[["sets"]][["train"]]
+bayes_cmll[["sets"]][["test"]]
+```
+
+* Una lista con los resultados de Naïve Bayes: modelo y predicciones.
+```{r}
+bayes_cmll[["resultado"]][["modelo"]]
+bayes_cmll[["resultado"]][["prediccion"]]
+```
+
+* Una matriz de confusión
+```{r}
+bayes_cmll[["confusion"]]
+```
+
+Finalmente, si así lo deseamos, podemos simplificar aún más nuestro código con la función `map()` del paquete **purrr**, que aprovecha las capacidades de programación funcional de R. De este modo podemos hacer múltiples análisis con una sóla línea de código.
+
+Para ello creamos una lista con todos los nombres de usuario que nos interesan y después le aplicamos nuestra función `hacer_bayes()` con `map`.
+```{r, eval = FALSE}
+lista_usuarios <- list(lopezobrador_ = "lopezobrador_",
+                       MSFTMexico = "MSFTMexico",
+                       UNAM_MX  = "UNAM_MX",
+                       CMLL_OFICIAL = "CMLL_OFICIAL")
+
+lista_bayes <- map(lista_usuarios, hacer_bayes, tabla = tuits_df)
+```
+
+# Para concluir
+En este artículo revisamos cómo implementar Naïve Bayes para clasificar texto usando R. Como pudimos ver, la parte más compleja del proceso es preparar los datos para análisis, una vez hecho esto, ajustar un modelo de Naïve Bayes y evaluar su precisión es relativamente sencillo.
+
+Dimos un vistazo a algunas de las medidas usadas para evaluar la precisión de las predicciónes de un modelo de clasificación. Con ello comprobamos que es posible obtener buenos resultados de Naïve Bayes incluso sin hacer ajustes específicos.
+
+También revisamos como podemos sistematizar este tipo de análisis, de modo tal que nos sea posible realizarlos de manere repetida con un mínimo de esfuerzo.
+
+Ha quedado pendiente discutir de qué manera podemos mejorar nuestro modelo de predicción, por ejemplo, mediante el uso de Laplace Smoothing o de probabilidades a priori, pero con lo aquí presentado debería ser un punto de partida suficiente para que estes en condiciones de realizar clasificaciones de texto usando Nïve Bayes y R.
+
+ ***
+
+Dudas, comentarios y correcciones son bienvenidas:
+
+* jboscomendoza@gmail.com
+
+El código y los datos usados en este documento se encuentran en Github:
+
+* https://github.com/jboscomendoza/rpubs/tree/master/bayes_twitter
