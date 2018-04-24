@@ -1,7 +1,7 @@
 ---
 title: "Arboles de decisión con R - Clasificación"
 author: "Juan Bosco Mendoza Vega"
-date: "18 de abril de 2018"
+date: "23 de abril de 2018"
 output: 
   html_document: 
     df_print: tibble
@@ -16,22 +16,22 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-En este artículo revisaremos lo esencial para implementar árboles de decisión en R, en particular el caso de los áboles de clasificación, usando el paquete *rpart*. Utilizaremos un conjunto de datos usado frecuentemente para probar métodos de aprendizaje automático en nuestro ejemplo y durante el proceso daremos también un vistazo a algunos problemas comunes al procesar información en R.
+En este artículo revisaremos lo esencial para implementar árboles de decisión en R, en particular el caso de los árboles de clasificación, usando el paquete *rpart*. Utilizaremos un conjunto de datos usado frecuentemente para probar métodos de aprendizaje automático en nuestro ejemplo y durante el proceso daremos también un vistazo a algunos problemas comunes al procesar información en R.
 
 Empecemos hablando de los árboles de decisión.
 
 # Una introducción informal a los árboles de decisión
 Los árboles de decisión son un método usado en distintas disciplinas como modelo de predicción. Estos son similares a diagramas de flujo, en los que llegamos a puntos en los que se toman decisiones de acuerdo a una regla.
 
-En el campo del aprendizaje automático, hay distintas maneras de obtener áboles de decisión, la que usaremos en esta ocasión es conocida como **CART**: **Classification And Regression Trees**. Esta es una técnica de aprendizaje supervisado. Tenemos una variable objetivo (dependiente) y nuestra meta es obtener una **función** que nos permita predecir, a partir de variables predictoras (independientes), el valor de la variable objetivo para casos desconocidos.
+En el campo del aprendizaje automático, hay distintas maneras de obtener árboles de decisión, la que usaremos en esta ocasión es conocida como **CART**: **Classification And Regression Trees**. Esta es una técnica de aprendizaje supervisado. Tenemos una variable objetivo (dependiente) y nuestra meta es obtener una **función** que nos permita predecir, a partir de variables predictoras (independientes), el valor de la variable objetivo para casos desconocidos.
 
 Como el nombre indica, CART es una técnica con la que se pueden obtener árboles de clasificación y de regresión. Usamos clasificación cuando nuestra variable objetivo es **discreta**, mientras que usamos regresión cuando es **continua**. Nosotros tendremos una variable discreta, así que haremos clasificación.
 
 La implementación particular de CART que usaremos es conocida como **Recursive Partitioning and Regression Trees** o **RPART**. De allí el nombre del paquete que utilizaremos en nuestro ejemplo.
 
-De manera general, lo que hace este algoritmo es encontrar la variable independiente que mejor separa nuestros datos en grupos, que corresponden con las categorías de la variable objetivo. Esta mejor separación es expreasada con una **regla**. A cada **regla** corresponde un **nodo**.
+De manera general, lo que hace este algoritmo es encontrar la variable independiente que mejor separa nuestros datos en grupos, que corresponden con las categorías de la variable objetivo. Esta mejor separación es expresada con una **regla**. A cada **regla** corresponde un **nodo**.
 
-Por ejemplo, supongamos que nuestra variable objetivo tiene dos niveles, **deudor** y **no deudor**. Encontramos que la variable que mejor separa nuestros datos es **ingreso mensual**, y la regla resultante es que ingreso mensual *> X pesos*. Esto quiere decir que los datos para los que que esta regla es verdadera, tienen más probabilidad de pertenecer a un grupo, que al otro. En este ejemplo, digamos que si la regla es verdadera, un caso tiene más probabilidad de formar parte del grupo **no deudor**.
+Por ejemplo, supongamos que nuestra variable objetivo tiene dos niveles, **deudor** y **no deudor**. Encontramos que la variable que mejor separa nuestros datos es **ingreso mensual**, y la regla resultante es que ingreso mensual *> X pesos*. Esto quiere decir que los datos para los que esta regla es verdadera, tienen más probabilidad de pertenecer a un grupo, que al otro. En este ejemplo, digamos que si la regla es verdadera, un caso tiene más probabilidad de formar parte del grupo **no deudor**.
 
 Una vez hecho esto, los datos son separados (particionados) en grupos a partir de la regla obtenida. Después, para cada uno de los grupos resultantes, se repite el mismo proceso. Se busca la variable que mejor separa los datos en grupos, se obtiene una regla, y se separan los datos. Hacemos esto de manera **recursiva** hasta que nos es imposible obtener una mejor separación. Cuando esto ocurre, el algoritmo se detiene. Cuando un grupo no puede ser partido mejor, se le llama **nodo terminal** u **hoja**.
 
@@ -39,13 +39,13 @@ Una característica muy importante en este algoritmo es que una vez que alguna v
 
 Además, supongamos después de una partición que hemos creado dos grupos, A y B. Es posible que para el grupo A, la variable que mejor separa estos datos sea diferente a la que mejor separa los datos en el grupo B. Una vez que los grupos se han separado, al algoritmo "no ve" lo que ocurre entre grupos, estos son independientes entre sí y las reglas que aplican para ellos no afectan en nada a los demás.
 
-El resultado de todo el proceso anterior es una serie de bifurcaciones que tiene la apariencia de un arbol que va creciendo ramas, de allí el nombre del procedimiento (aunque a mi en realidad me parece más parecido a la raíz del ábol que a las ramas).
+El resultado de todo el proceso anterior es una serie de bifurcaciones que tiene la apariencia de un árbol que va creciendo ramas, de allí el nombre del procedimiento (aunque a mí en realidad me parece más parecido a la raíz del árbol que a las ramas).
 
 Las **principales ventajas** de este método son su interpretabilidad, pues nos da un conjunto de reglas a partir de las cuales se pueden tomar decisiones. Este es un algoritmo que no es demandante en poder de cómputo comparado con procedimientos más sofisticados y, a pesar de ello, que tiende a dar buenos resultados de predicción para muchos tipos de datos.
 
-Sus **principales desventajas** son que este en tipo de clasificación "debil", pues sus resultados pueden variar mucho dependiendo de la muestra de datos usados para entrenar un modelo. Además es fácil sobre ajustar los modelos, esto es, hacerlos excelentes para clasificar datos que conocemos, pero deficientes para datos conocidos.
+Sus **principales desventajas** son que este en tipo de clasificación "débil", pues sus resultados pueden variar mucho dependiendo de la muestra de datos usados para entrenar un modelo. Además es fácil sobre ajustar los modelos, esto es, hacerlos excelentes para clasificar datos que conocemos, pero deficientes para datos conocidos.
 
-Para saber más sobre este algortimo, en particular que quiere decir eso de **mejor separación**, puedes leer el siguiente documento, que también llamar con `vignette(topic = "longintro", package = "rpart")`:
+Para saber más sobre este algoritmo, en particular que quiere decir eso de **mejor separación**, puedes leer el siguiente documento, que también llamar con `vignette(topic = "longintro", package = "rpart")`:
 
 * https://cran.r-project.org/web/packages/rpart/vignettes/longintro.pdf
 
@@ -58,7 +58,7 @@ Usaremos los siguientes paquetes.
 * tidyverse: para llamar a la familia de paquetes tidyverse, que nos ayudaran al procesamiento de nuestros datos.
 * rpart: el paquete con la implementación de árboles de clasificación que utilizaremos.
 * rpart.plot: para graficar los resultados de rpart.
-* caret: un paquete con utilidades para clasificación y regresion. Lo usaremos por su función para crear matrices de confusión
+* caret: un paquete con utilidades para clasificación y regresión. Lo usaremos por su función para crear matrices de confusión
 
 
 ```{r, message=FALSE}
@@ -85,16 +85,16 @@ download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/wine/wi
 download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/wine/wine.names", "wine.names")
 ```
 
-Como habrás notado, nuestros datos tienen una extensión de archivo no convencional: **.data**. En **R** no existe una función específica para leer archivos con esta extensión, similar a `red.csv()` o `read.dat()`, las cuales nos facilitan tarea de importar achivos de formatos específicos. Lo mismmo pasa con el archivo con su descripción, que tiene la extensión **.name**.
+Como habrás notado, nuestros datos tienen una extensión de archivo no convencional: **.data**. En **R** no existe una función específica para leer archivos con esta extensión, similar a `red.csv()` o `read.dat()`, las cuales nos facilitan tarea de importar archivos de formatos específicos. Lo mismmo pasa con el archivo con su descripción, que tiene la extensión **.name**.
 
-Necesitamos explorar estos archivos para saber cómo podemos leerlos. Para estos casos, usamos la función `readLines()`, que lee archivos, linea por linea, independientemente de su extensión o formato. con el argumento `n = 10` indicamos que sólo deseamos leer las primeras diez lineas de cada archivo.
+Necesitamos explorar estos archivos para saber cómo podemos leerlos. Para estos casos, usamos la función `readLines()`, que lee archivos, línea por línea, independientemente de su extensión o formato. con el argumento `n = 10` indicamos que sólo deseamos leer las primeras diez líneas de cada archivo.
 
 Empezamos con los datos.
 ```{r}
 readLines("wine.data", n = 10)
 ```
 
-El archivo de datos parece ser una tabla de datos rectangular, con columnas separadas por comas. Entonces leer este archivo es facil. El único inconveniente que tenemos es que nos faltan los nombres de cada columna.
+El archivo de datos parece ser una tabla de datos rectangular, con columnas separadas por comas. Entonces leer este archivo es fácil. El único inconveniente que tenemos es que nos faltan los nombres de cada columna.
 
 Podemos usar `read_table()` para leer este archivo. Esta función está diseñada para leer tablas de datos, es decir, con estructura rectangular (renglones y columnas).
 
@@ -115,14 +115,14 @@ Veamos si el archivo **wine.names** tiene respuestas.
 readLines("wine.names", n = 10)
 ```
 
-Parece ser un archivo de texto comun y corriente, pero con una extensión inusual. Podemos crear una copia de este archivo con la extensión a **.txt** con `file.copy()` para leerlo fácilmente en bloc de notas o cualquier aplicación similar. Después, usamos `file.show()` para darle una lectura.
+Parece ser un archivo de texto común y corriente, pero con una extensión inusual. Podemos crear una copia de este archivo con la extensión a **.txt** con `file.copy()` para leerlo fácilmente en bloc de notas o cualquier aplicación similar. Después, usamos `file.show()` para darle una lectura.
 ```{r, eval=FALSE}
 file.copy(from = "wine.names", to = "wine_names.txt")
 
 file.show("wine_names.txt")
 ```
 
-A partir de lo que este documentos explica, descubrimos que nuestros datos corresponden a trece características químicas de tres tipos de vinos. Esto quiere decir que una de las columnas de nuestros datos indica el tipo de vino y las otras trece son sus características.
+A partir de lo que este documento explica, descubrimos que nuestros datos corresponden a trece características químicas de tres tipos de vinos. Esto quiere decir que una de las columnas de nuestros datos indica el tipo de vino y las otras trece son sus características.
 
 Aunque es probable que la primera columna de nuestros datos sea la variable con el tipo de vino, usamos `summary()` para asegurarnos
 ```{r}
@@ -155,12 +155,12 @@ vino <- vino %>%
   mutate_at("tipo", factor)
 ```
 
-Ahora sí, empecemos a crear áboles de clasificación.
+Ahora sí, empecemos a crear árboles de clasificación.
 
 # Creando un sets de entrenamiento y prueba
 Necesitamos un set de entrenamiento para generar un modelo predictivo, y un set de prueba, para comprobar la eficacia de este modelo para hacer predicciones correctas.
 
-usamos la función `sample_frac()` de *dplyr* para obtener un subconjunto de nuestros datos, que consiste en 70% del total de ellos. Usamos también `set.seed()` para que este ejemplo sea reproducible.
+Usamos la función `sample_frac()` de *dplyr* para obtener un subconjunto de nuestros datos, que consiste en 70% del total de ellos. Usamos también `set.seed()` para que este ejemplo sea reproducible.
 ```{r}
 set.seed(1649)
 vino_entrenamiento <- sample_frac(vino, .7)
@@ -174,7 +174,7 @@ vino_prueba <- setdiff(vino, vino_entrenamiento)
 
 
 # Entrenando nuestro modelo
-Usamos la función `rpart` de *rpart* para entrenar nuestro modelo. Esta función nos pide una formula para especificar la variable objetivo de la clasificación. La formula que usaremos es `tipo ~ .`, la cual expresa que intentaremos clasificar **tipo** usando a todas las demas variables como predictoras.
+Usamos la función `rpart` de *rpart* para entrenar nuestro modelo. Esta función nos pide una formula para especificar la variable objetivo de la clasificación. La formula que usaremos es `tipo ~ .`, la cual expresa que intentaremos clasificar **tipo** usando a todas las demás variables como predictoras.
 
 En este primer intento no ajustaremos ningún otro parámetro.
 ```{r}
@@ -190,7 +190,7 @@ arbol_1
 ```
 Lo anterior muestra el esquema de nuestro árbol de clasificación. Cada inciso nos indica un nodo y la regla de clasificación que le corresponde. Siguiendo estos nodos, podemos llegar a las hojas del árbol, que corresponde a la clasificación de nuestros datos.
 
-Todo lo anterior resulta mucho máz claro si lo visualizamos, así que creamos una gráfica usando nuestro modelo con la función `rpart.plot()` de *rpart.plot*.
+Todo lo anterior resulta mucho más claro si lo visualizamos, así que creamos una gráfica usando nuestro modelo con la función `rpart.plot()` de *rpart.plot*.
 ```{r}
 rpart.plot(arbol_1)
 ```
@@ -199,7 +199,7 @@ En estos gráficos, cada uno de los rectángulos representa un **nodo** de nuest
 
 Cada nodo está coloreado de acuerdo a la categoría mayoritaria entre los datos que agrupa. Esta es la categoría que ha predicho el modelo para ese grupo.
 
-Dentro del rectangulo de cada nodo se nos muestra qué proporción de casos pertenecen a cada categoría y la proporción del total de datos que han sido agrupados allí. Por ejemplo, el rectángulo en el extremo inferior izquierdo de la gráfica tiene 94% de casos en el tipo 1, y 4% en los tipos 2 y 3, que representan 39% de todos los datos.
+Dentro del rectángulo de cada nodo se nos muestra qué proporción de casos pertenecen a cada categoría y la proporción del total de datos que han sido agrupados allí. Por ejemplo, el rectángulo en el extremo inferior izquierdo de la gráfica tiene 94% de casos en el tipo 1, y 4% en los tipos 2 y 3, que representan 39% de todos los datos.
 
 Estas proporciones nos dan una idea de la precisión de nuestro modelo al hacer predicciones. De este modo, las reglas que conducen al rectángulo que acabamos de mencionar nos dan un 92% de clasificaciones correctas. En contraste, el tercer rectángulo, de izquierda a derecha, de color gris, tuvo sólo 62% de clasificaciones correctas.
 
@@ -214,16 +214,16 @@ argumento `type = "class` para
 prediccion_1 <- predict(arbol_1, newdata = vino_prueba, type = "class")
 ```
 
-Cruzamos la prediccion con los datos reales de nuestro set de prueba para generar una matriz de confusión, usando `confusionMatrix()` de *caret*.
+Cruzamos la predicción con los datos reales de nuestro set de prueba para generar una matriz de confusión, usando `confusionMatrix()` de *caret*.
 ```{r}
 confusionMatrix(prediccion_1, vino_prueba[["tipo"]])
 ```
 
 Nada mal. Tenemos una precisión (accuracy), Kappa y otros estadísticos con buenos valores.
 
-Sin embargo, no hemos terminado. Este arbol ha predicciones a partir de los datos de entrenamiento que hemos proporcionado. ¿Recuerdas que el algoritmo busca la mejor separación para crear grupos? Si nuestros datos cambian, la variable que hace la mejore separación también puede cambiar. Y por lo tanto, los grupos que resulten de esta separación, serán distintos, resultando en un modelo que puede ser muy distinto al que hemos obtenido.
+Sin embargo, no hemos terminado. Este árbol ha predicciones a partir de los datos de entrenamiento que hemos proporcionado. ¿Recuerdas que el algoritmo busca la mejor separación para crear grupos? Si nuestros datos cambian, la variable que hace la mejore separación también puede cambiar. Y por lo tanto, los grupos que resulten de esta separación, serán distintos, resultando en un modelo que puede ser muy distinto al que hemos obtenido.
 
-Generamos un segundo arbol, usando sets de entrenamiento y prueba diferentes.
+Generamos un segundo árbol, usando sets de entrenamiento y prueba diferentes.
 ```{r}
 set.seed(7439)
 vino_entrenamiento_2 <- sample_frac(vino, .7)
@@ -244,9 +244,9 @@ confusionMatrix(prediccion_2, vino_prueba_2[["tipo"]])
 
 ¡Oh! Esta vez hemos obtenido una precisión casi perfecta en nuestras predicciones. Con este modelo hemos mejorado la predicción con respecto al anterior.
 
-Sin embargo, es importante notar que este segundo modelo es diferente con respecto al anterior en el orden que fueron hechas las particiones, pero es identico en cuanto a las variables usadas para separar grupos. 
+Sin embargo, es importante notar que este segundo modelo es diferente con respecto al anterior en el orden que fueron hechas las particiones, pero es idéntico en cuanto a las variables usadas para separar grupos. 
 
-Podemos cambiar los datos usados en los sets de entrenamiento y prueba y obtener resultados disntintos.
+Podemos cambiar los datos usados en los sets de entrenamiento y prueba y obtener resultados distintos.
 
 ```{r}
 set.seed(8476)
@@ -270,11 +270,11 @@ En todos estos ejemplos, lo único que hemos cambiado son nuestros sets de prueb
 # ¿Cómo elegimos un modelo?
 La respuesta depende de nuestros objetivos y qué tanta precisión nos interese en nuestras predicciones. 
 
-Por ejemplo, con los datos sobre vinos podría ser que no nos interesan tanto las reglas específicas para clasificar vinos, sino las variables que son más importantes para distinguirlos. Lo que nos han pedido es reduzcamos el número de variables usadas para catalogar vinos para fines de control de calidad, de las trece originales a un numero menor.
+Por ejemplo, con los datos sobre vinos podría ser que no nos interesan tanto las reglas específicas para clasificar vinos, sino las variables que son más importantes para distinguirlos. Lo que nos han pedido es reduzcamos el número de variables usadas para catalogar vinos para fines de control de calidad, de las trece originales a un número menor.
 
-Pero también puede ser que el porpósito del análisis sea clasificar vinos por riesgo de toxicidad. En este caso sí es importante tener reglas precisas para hacer predicciones.
+Pero también puede ser que el propósito del análisis sea clasificar vinos por riesgo de toxicidad. En este caso sí es importante tener reglas precisas para hacer predicciones.
 
-En todo caso, una manera de elegir un modelo es, en realidad, crear múltiples modelos y compararlos. Por ejemplo, creamso cien árboles con los mismos datos y despues analizaos los modelos que tienen más exito para clasificar para determinar cuales variables son las que mejor separan los datos y en qué rangos se encuentran los valores de las reglas. De hecho, este es el principio del método **Random Forest**, pero ese es tema para otro día.
+En todo caso, una manera de elegir un modelo es, en realidad, crear múltiples modelos y compararlos. Por ejemplo, creamos cien árboles con los mismos datos y después analizaos los modelos que tienen más éxito para clasificar para determinar cuáles variables son las que mejor separan los datos y en qué rangos se encuentran los valores de las reglas. De hecho, este es el principio del método **Random Forest**, pero ese es tema para otro día.
 
 En nuestro ejemplo, hay algunas variables que aparecen frecuentemente, pero la regla asociada a ellas ha cambiado. **color_intensity** ha aparecido en los tres modelos generados, con tres valores distintos: 4, 3.5 y 4.9. Algo similar ha ocurrido con **proline** y **flavanoids**. Lo que ha sido consistente es la presencia de estas variables, en la mayoría de nuestros modelos. Es muy probable que si repetimos este ejercicio suficientes veces, encontraremos más regularidades como esta.
 
@@ -339,7 +339,7 @@ unarbol[["diagnostico"]]
 
 # Para concluir
 
-Notarás que las funciones anteriores incluyen ajustes de parámetros que no hemos discutido y que nos ayudan a perfeccionar nuestros modelos de predicción con árboles de clasificiación. Estos los revisaremos en otra ocasión. 
+Notarás que las funciones anteriores incluyen ajustes de parámetros que no hemos discutido y que nos ayudan a perfeccionar nuestros modelos de predicción con árboles de clasificación. Estos los revisaremos en otra ocasión. 
 
 Por lo pronto, en este documento ya revisamos qué son los árboles de decisión, sus ventajas y desventajas, cómo implementarlos para hacer clasificación usando el paquete **rpart** de R y, de paso, cómo resolver algunos problemas comunes al importar datos guardados en archivos de formato no convencional.
 
@@ -353,5 +353,4 @@ Dudas, comentarios y correcciones son bienvenidas:
 
 El código y los datos usados en este documento se encuentran en Github:
 
-* https://github.com/jboscomendoza/rpubs/tree/master/bayes_twitter
-
+* https://github.com/jboscomendoza/rpubs/tree/master/arboles/
