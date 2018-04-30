@@ -1,0 +1,370 @@
+---
+title: "Redes semánticas con R"
+author: "Juan Bosco Mendoza Vega"
+date: "29 de abril de 2018"
+output: 
+  html_document: 
+    df_print: tibble
+    fig_height: 6.5
+    fig_width: 8
+    highlight: kate
+    theme: yeti
+    toc: yes
+---
+
+```{r setup, include=FALSE, out.width = 70}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+En este artículo revisaremos como crear redes semánticas usando R, y en el proceso veremos cómo hacer algunas de las tareas más comunes al procesar texto.
+
+# Una introducción informal a las redes semánticas
+Las redes semánticas son una técnica de representación usada en distintas disciplinas, entre ellas, la minería de texto. Estas redes son una forma de obtener y visualizar la relación entre elementos de un texto, que pueden ser palabras, n-gramas, frases u otras unidades de texto. El resultado es similar a una telaraña, en la que cada nodo o punto de unión es una unidad, y de ellas salen líneas que las unen a otras unidades. De esta manera podemos extraer la información relevante de cuerpos de complejos.
+
+Existen diferentes formas en las que podemos establecer relaciones entre unidades, con algunas de ella, como la que revisaremos en este documento, es incluso posible establecer la dirección de la relación. Por ejemplo, decir que de la palabra "casa" hay una conexión a "grande", de la  manera "casa -> grande". 
+
+Como podrás ver, esta es una técnica conceptualmente sencilla y esta es su principal fortaleza, es fácil de interpretar y el proceso para generar redes es poco demandante en cuanto a cómputo.
+
+Puedes leer más sobre redes semánticos en el siguiente enlace:
+
+* http://elies.rediris.es/elies9/4-3-2.htm
+
+Comencemos preparando nuestro espacio de trabajo.
+
+# Paquetes necesarios
+Los paquetes usaremos son:
+
+* **tidytext**: El paquete principal de esta ocasión. Contiene herramientas para procesar texto de manera limpia e intuitiva.
+* **tidyverse**: Un meta paquete que llama a otros más (dplyr, readr, purrr, etc.) que nos facilitan la lecuta, procesamiento y visualización de datos.
+* **igraph** y **ggraph**: Paquetes que amplían las funciones del paquete ggplot2 del tidyverse. En particular, graph hará el trabajo de crear las redes semánticas.
+* **tm**: Herramientas de minería de texto. 
+
+Si no contamos con las paquetes, los instalamos con `install.packages()`, como es usual.
+```{r, message=FALSE}
+library(tidytext)
+library(tidyverse)
+library(tm)
+library(igraph)
+library(ggraph)
+```
+
+Continuemos obteniendo el texto que analizaremos.
+
+# Nuestro texto: El amigo manso 
+Para este ejemplo usaremos el texto de la novela "El amigo manso" de Benito Pérez Galdós, publicada originalmente en 1882 y disponible en Project Gutenberg por formar parte del dominio público.
+
+Descargaremos esta novela como un archivo **.txt**. He creado una copia del archivo en un repositorio de Github, para facilitar el proceso.
+
+Usamos `download.file()` para descargar el archivo.
+
+```{r, eval=FALSE}
+download.file(url = "https://raw.githubusercontent.com/jboscomendoza/rpubs/master/red_semantica/55563-0.txt", destfile = "55563-0.txt")
+```
+
+Exploramos nuestro documento con `read_lines()` de *readr*, pidiendo después las primeras 15 líneas con `head()`.
+```{r}
+read_lines("55563-0.txt") %>% 
+  head(15)
+```
+
+Considerando que estamos trabajando con una novela completa, de un par cientos de páginas de largo, será necesario que ver nuestro documento fuera de R para explorar más fácilmente su estructura. Usamos `file.show()` para esto.
+```{r, eval=FALSE}
+file.show("55563-0.txt")
+```
+
+# La estructura de nuestro texto
+Después de revisar el documento nos damos cuenta de un par de cosas.
+
+Primero, el texto está estructurado en renglones con un límite de ancho, es decir cuando el texto llega a un ancho determinado (menos de 80 caracteres), ocurre un salto de línea. Por lo tanto tenemos muchos enunciados interrumpido a la mitad de ellos y no contamos con párrafos. Sin embargo, para indicar cada final de un párrafo hay una línea en blanco.
+
+Esto es importante porque una línea de 80 caracteres no contiene suficiente texto como para armar redes semánticas que tengan sentido.
+
+Segundo, además del texto de la novela, tenemos una sección introductoria al texto y al final la información legal de Project Gutenberg. El texto que nos interesa esta entre estos dos.
+
+Considerando lo anterior, necesitamos hacer dos cosas: importar sólo el texto que nos interesa y estructurarlo por párrafos.
+
+# Creando párrafos
+Revisando nuestro documento, sabemos que la novela empieza en la línea 154 y termina en la 10612. Usamos esta infomación en `read_lines` de *readr. `skip = 153` para empezar en la línea 154, y `n_max = (10612 - 153)` para leer hasta la línea que originalmente sería la 10612, pero tomando en cuenta que empezamos a leer desde la 153.
+
+Usamos `trimws()` con `map()` de *purrr* para quitar los espacios en blanco al inicio y final de cada línea de texto. Esto hará más consistente nuestro texto.
+
+Sabemos que los párrafos de nuestro texto están indicados por un renglón en blanco, así que usaremos esta información para reestructurar nuestro documento por párrafos, no renglones de ancho más o menos fijo.
+
+Cambiamos el contenido de estos renglones por **"_salto_"** usando `ifelse()`, así tendremos una palabra clave única para indicar saltos de página. Una vez hecho esto, unimos todo el texto en una sola cadena de texto con `paste0()` usando el argumento `collapse = " "`, para asegurarnos que habrá un espacio entre cada renglón unido.
+
+Ahora, separamos de vuelta el texto, usando `strsplit()` con el argumento `split = "_salto_"`. De este modo separamos cada que ocurre un salto de párrafo, obteniendo entonces párrafos.
+
+Finalmente, usamos otra vez `trimws()` con `map()` y convertimos nuestro resultados a un data frame con `data.frame()`, usando el argumento `stringsAsFactors = FALSE` para que nuestro texto se conserve como de tipo *character*. Pasamos los anterior a un tibble, con `tbl_df()` de *dplyr*, y ponemos "texto" como nombre de la columna resultante, usando `names() <-`.
+```{r}
+manso <- 
+  read_lines("55563-0.txt", skip = 153, n_max = (10612 - 153)) %>% 
+  map(trimws) %>% 
+  ifelse(. == "", "_salto_", .) %>% 
+  paste0(., collapse = " ") %>% 
+  strsplit(split = "_salto_") %>% 
+  map(trimws) %>% 
+  data.frame(stringsAsFactors = FALSE) %>% 
+  tbl_df() %>% 
+  {
+    names(.) <- "texto"
+    .
+  }
+```
+
+Como es posible que después procesemos datos con estructuras similares, definimos un par de funciones.
+
+Una para leer nuestro texto.
+
+```{r}
+leer_texto <- function(archivo, inicio, final) {
+   read_lines(archivo, skip = inicio, n_max = (final - inicio)) %>% 
+  map_chr(trimws)
+  }
+```
+
+Otra para crear párrafos.
+```{r}
+crear_parrafos <- function(texto) {
+  texto %>% 
+    map(trimws) %>% 
+    ifelse(. == "", "_salto_", .) %>% 
+    paste0(., collapse = " ") %>% 
+    strsplit(split = "_salto_") %>% 
+    map(trimws) %>% 
+    data.frame(stringsAsFactors = FALSE) %>% 
+    tbl_df() %>% 
+    {
+      names(.) <- "texto"
+      .
+    }
+}
+```
+
+Por cierto, separar y unir son tareas que realizaremos mucho en este ejemplo.
+
+# Quitando renglones vacíos
+Ahora quitamos los renglones vacíos y los espacios en blanco al principio y final de cada renglón, usando `filter()` y `mutate_all()` de *dplyr*, con ayuda de `trimws()`.
+```{r}
+manso <- 
+  manso %>% 
+  filter(!texto %in% c(" ", "")) %>% 
+  mutate_all(trimws)
+```
+
+Naturalmente, una función nos ahorrara trabajo en el futuro.
+```{r}
+borrar_vacios <- function(libro_vacios) {
+  libro_vacios %>% 
+  filter(!texto %in% c(" ", "")) %>% 
+  mutate_all(trimws)
+}
+```
+
+# Obteniendo capítulos.
+Otra que cosa que descubrimos al revisar nuestro documento, es  que los capítulos de la novela están indicados por números romanos, cada uno en su propio renglón. Si queremos agrupar los párrafos que hemos creado en capítulos, lo cual será conveniente para análisis posteriores, este será nuestro punto de referencia
+
+Lo primero que necesitamos es una manera de encontrar estos números romanos. Para esto, usamos **regex**.
+
+Creamos una expresión regular que capture todos los renglones de **manso** en los que su único contenido sean números romanos. Sabemos que los números romanos son letras mayúsculas así que podemos usar `[[:upper:]]`. También sabemos que es lo único que aparece en ese renglón, así que usamos `^` para indicar que el texto que deseamos capturar inicia con una mayúscula, y `$` para indicar que termina con una mayúscula. Por último, usamos el cuantificador `+` para que nuestra regex capture cadenas de texto de largo 1 o más.
+
+Nuestra regex luciría así: `"^[[:upper:]]+$"`.  
+
+Usamos `grepl()` con `filter()` de *dplyr* para verificar.
+
+```{r}
+manso %>% 
+  filter(grepl("^[[:upper:]]+$", texto))
+```
+Luce bien, capturamos cincuenta renglones, que es el número de capítulo de **manso**, del I al L.
+
+Ahora, usamos `mutate()` de *dplyr* e `ifelse()` para crear una nueva columna llamada **capitulo**. 
+
+Buscamos en la columna **texto** los renglones que captura nuestra expresión regular, y en los casos que esto es verdadero, mandamos el texto encontrado a la columna **capitulo**. Después, llenamos los renglones debajo de este con su contenido, usando `fill()` de tidyr, etiquetando así a todos los párrafos con el número de capítulo que les corresponde. Por último, usamos `filter()` para quitar los renglones con el número de capítulo.
+```{r}
+manso <- 
+  manso %>% 
+  mutate(capitulo = ifelse(grepl("^[[:upper:]]+$", texto), texto, NA)) %>% 
+  fill(capitulo) %>% 
+  filter(texto != capitulo)
+
+```
+
+Creamos una función para encontrar capítulos, para simplificar la vida a nuestro yo del futuro.
+```{r}
+encontrar_capitulos <- function(libro) {
+  libro %>% 
+  mutate(capitulo = ifelse(grepl("^[[:upper:]]+$", texto), texto, NA)) %>% 
+  fill(capitulo) %>% 
+  filter(texto != capitulo)
+}
+```
+
+Ahora sí, estamos listos para continuar.
+
+# Creando tokens: bigramas.
+Como crearemos una red semántica conectando palabras, necesitamos segmentar nuestro texto por parejas de palabra, es decir, n-gramas en los que n es igual dos. Estos casos de n-grama son conocidos como bigramas. Este es el *token* o *unidad* de texto de nuestro análisis.
+
+Para esta tarea usaramos la función `unnest_tokens()` de *tidytext*, con los argumentos `token = "ngram"` y `n = 2`. Tomamos la columna "texto" como entrada y obtenemos "bigrama" de salida.
+```{r}
+manso_bigrama <- 
+  manso %>% 
+  unnest_tokens(input = "texto", output = "bigrama", token = "ngrams", n = 2)
+```
+
+Así, obtenemos un data frame con un bigrama por renglón. Nota que el número de capítulo nos ha ayudado a identificar a agruparlos, sin esta información, tendríamos problemas de duplicación.
+```{r}
+manso_bigrama
+```
+
+Podemos explorar cuáles son los bigramas más comunes.
+```{r}
+manso_bigrama %>% 
+  count(bigrama, sort = T)
+```
+
+Parece que nuestros bigramas más comunes son conjunciones, preposiciones y artículos. Esto es un problema. Si dejamos estos bigramas para formar nuestra red semántica, obtendremos una red muy "enredada", de la cual podremos extraer poca información. Hay que solucionar esta situación
+
+# Quitando palabras huecas
+Las palabras que aportan poca información semántica, como conjunciones, preposiciones y artículos son conocidas como **palabras huecas**.
+
+Para quitarlas de nuestro texto, contamos con la ayuda de la función `stopwords()` de *tm*. Si llamamos a esta función con el argumento `kind = "es"`, nos devolverá un vector con un listado de palabras huecas en español.
+```{r}
+stopwords(kind = "es") %>% head(15)
+```
+
+Podríamos usar este vector con `filter()` si nuestros datos fueran palabras, no bigramas. Así que separamos nuestros bigramas en palabra **uno** y **dos**, con `separate()` de *tidyr*, y entonces filtramos.
+
+Además, necesitamos una palabra por columna para crear las redes semánticas, de modo que es algo que tendríamos que hacer de todos modos. Usamos `count()` de *dplyr* para obtener la frecuencia de cada bigrama.
+```{r}
+manso_bigrama <- 
+  manso_bigrama %>% 
+  separate(bigrama, into = c("uno", "dos"), sep = " ") %>% 
+  filter(!uno %in% stopwords(kind = "es")) %>% 
+  filter(!dos %in% stopwords(kind = "es")) %>% 
+  count(uno, dos)
+```
+
+Definimos también una función para la generación de bigramas sin palabras huecas.
+```{r}
+generar_bigramas <- function(libro_parrafo) {
+  libro_parrafo %>% 
+    unnest_tokens(input = "texto", output = "bigrama", token = "ngrams", n = 2) %>% 
+    separate(bigrama, into = c("uno", "dos"), sep = " ") %>% 
+    filter(!uno %in% stopwords("es")) %>% 
+    filter(!dos %in% stopwords("es")) %>% 
+    count(uno, dos)
+}
+```
+
+Hemos hecho el conteo de palabras porque crearemos una red que muestre **la intensidad con la que se relacionan las palabras**, cuyo indicador será la frecuencia con la que parejas de palabras aparecen en el texto. ¡Ahora sí, a crear nuestra red semántica!
+
+# Creando una red semántica
+Empezamos filtrando los bigramas con una frecuencia muy baja. Nos quedamos con los que aparecen cinco veces o más.
+
+Después, usamos las función `graph_from_data_frame()` de *igraph* para convertir nuestros datos a un formato apropiado para generar redes semánticas.
+
+Hecho esto, usamos `ggraph()` del paquete con el mismo nombre para crear nuestra red. Esta función funciona con el mismo sistema que `ggplot2`, por lo tanto, tenemos que indicar los **geoms** para armar un gráfico. Usamos `geom_edge_link()` para indicar las conexiones, `geom_node_point()` para nodos, y `geom_node_text()` con el argumento `aes(label = name)` para mostrar las palabras.
+
+Notarás que dentro de `geom_edge_link()` hemos usado la función `arrow()`. Esta creará las flechas marcando la direccionalidad de las relaciones.
+
+Veamos que obtenemos. Usamos `set.seed()` para obtener siempre la misma versión de la red.
+```{r}
+set.seed(175)
+manso_bigrama %>% 
+  filter(n >= 5) %>% 
+  graph_from_data_frame() %>% 
+  ggraph() +
+  geom_edge_link(arrow = arrow(type = "closed", length = unit(.075, "inches"))) +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) + 
+  theme_void()
+```
+
+¡Nada mal! Sin embargo, tenemos un pequeño problema. Hay una gran cantidad de conexiones a un par de palabras que no fueron identificadas como huecas, pues aparecen con tilde, lo cual no es convencional en el español moderno filtramos estas palabras.
+
+```{r}
+manso_bigrama <- 
+  manso_bigrama %>% 
+  filter(!uno %in% c("á", "ó")) %>% 
+  filter(!dos %in% c("á", "ó"))
+```
+
+Creamos de nuevo la red.
+```{r}
+set.seed(175)
+manso_bigrama %>% 
+  filter(n >= 5) %>% 
+  graph_from_data_frame() %>% 
+  ggraph() +
+  geom_edge_link(arrow = arrow(type = "closed", length = unit(.075, "inches"))) +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) + 
+  theme_void()
+```
+
+Mucho mejor. Ahora podemos ver con más claridad algunas relaciones de palabras importantes. Por ejemplo, seguramente hay un personaje llamado "manuel peña" y se habla de la "pobre niña chucha". En realidad, con esto nos damos cuenta que **El amigo manso** es una novela que se centra en las relaciones que tienen algunos pocos personajes, los cuales parecen tener la tendencia a hablar de manera formal y haciendo referencias al pasado. Corresponde con lo que recuerdo de haber leído este libro hace un par de años.
+
+Creamos una función para generar redes, con algunos ajustes para mejorar la presentación de la red semántica, entre otras, que los vínculos tengan un color que corresponda la frecuencia con la que ocurren.
+```{r}
+crear_red <- function(libro_bigrama, umbral = 5) {
+  libro_bigrama %>% 
+    filter(n > umbral) %>% 
+    graph_from_data_frame() %>% 
+    ggraph() +
+    geom_edge_link(aes(edge_alpha = n),
+                   arrow = arrow(type = "closed", length = unit(.1, "inches"))) +
+    geom_node_point(size = 2, color = "#9966dd") +
+    geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+    theme_void()
+}
+```
+
+Hacemos ajustes a una función que ya habíamos creado para generar bigramas.
+
+```{r}
+generar_bigramas <- function(libro_parrafo) {
+  libro_parrafo %>% 
+    unnest_tokens(input = "texto", output = "bigrama", token = "ngrams", n = 2) %>% 
+    separate(bigrama, into = c("uno", "dos"), sep = " ") %>% 
+    filter(!uno %in% c(stopwords("es"), "á", "ó")) %>% 
+    filter(!dos %in% c(stopwords("es"), "á", "ó")) %>% 
+    count(uno, dos)
+}
+```
+
+Y por supuesto, podemos crear una función que haga todo el proceso de creación de redes.
+```{r}
+red_texto <- function(archivo, inicio, final, umbral = 5) {
+    leer_texto(archivo, inicio = inicio, final = final)  %>% 
+    crear_parrafos() %>% 
+    encontrar_capitulos() %>% 
+    borrar_vacios() %>% 
+    generar_bigramas() %>% 
+    crear_red(umbral = umbral)
+}
+```
+
+Pongamos a prueba nuestra función `red_texto()`.
+```{r}
+set.seed(175)
+red_texto(archivo = "55563-0.txt", inicio = 153, final = 10612, umbral = 5)
+```
+
+Con esto estaremos listos para crear redes de textos con un formato similar al de la novela que hemos analizado.
+
+# Para concluir
+En este artículo revisamos como crear una red semántica usando R, en particular las funciones de los paquetes *tidytext*, *igraph* y *ggraph*. En el proceso también nos dimos cuenta que separar y unir texto de distintas maneras son tareas de procesamiento más importantes en minería de texto. En varias ocasiones, unimos nuestro texto sólo para separarlo una vez más, para así poder unirlo de una manera distinta.
+
+Las redes semánticas son una herramienta muy útil al realizar minería de texto. Como vimos, son relativamente simples de implementar y nos permiten darnos una idea de los temas más importantes de nuestros textos. Además, son lo suficientemente flexibles como para adaptarse a distintas necesidades de análisis.
+
+En este ejemplo generamos nuestras redes por frecuencia, pero es posible utilizar otros indicadores, pero eso lo revisaremos en otra ocasión.
+
+***
+
+Dudas, comentarios y correcciones son bienvenidas:
+
+* jboscomendoza@gmail.com
+
+El código y los datos usados en este documento se encuentran en Github:
+
+* https://github.com/jboscomendoza/rpubs/tree/master/red_semantica
