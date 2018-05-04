@@ -1,0 +1,240 @@
+---
+title: "Alfa de Cronbach - Psicometría con R"
+author: "Juan Bosco Mendoza Vega"
+date: "3 de mayo de 2018"
+output: 
+  html_document: 
+    df_print: tibble
+    highlight: kate
+    theme: yeti
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+*Este artículo está dirigido a practicantes de psicometría que están interesados en realizar sus análisis usando R, pero que no necesariamente son expertos en este lenguaje de programación.*
+
+En esta ocación revisaremos como obtener e interpretar el coeficiente Alfa de Cronbach usando el paquete **psych** de R. Para ello usaremos un conjunto de datos abierto, correspondiente a un test de inteligencia aplicado en línea. 
+
+# ¿Qué es el Alfa de Cronbach?
+El coeficiente Alfa de Cronbach es el indicador de **confiabilidad** de escalas psicométricas más usado en ciencias sociales.  
+
+El Alfa de Cronbach nos da una medida de la consistencia interna que tienen los reactivos que forman una escala. Si esta medida es alta, suponemos tener evidencia de la homogeneidad de dicha escala, es decir, que los ítems están "apuntando" en la misma dirección.
+
+Por esta razón, el Alfa de Cronbach suele interpretarse como una medida de **unidimensionalidad** de una escala, por tanto, de que estamos midiendo de manera consistente *algo* con ella. Esto es, asumimos que nuestra escala es **Tau equivalente** o **esencialmente Tau equivalente**. 
+
+Sin embargo, para poder hacer cualquier afirmación con respecto a la dimensionalidad de una escala, primero necesitamos evidencia de su validez, lo cual es importante tenerlo en mente para evitar interpretaciones erróneas del alfa de Cronbach.
+
+El Alfa de Cronbach se obtiene a partir de la covarianza (intercorrelaciones) entre ítems de una escala, la varianza total de la escala, y  el número de reactivos que conforman la escala.
+
+La fórmula para calcular el Alfa de Cronbach usando varianzas es la siguiente:
+$$
+\alpha = \frac{K}{K-1}( \frac{\sum_{i=1}^{K} \sigma^2_{Y_i}} {\sigma^2_X}  )
+$$
+Donde:
+
+* K = Número de ítems en la escala.
+* $\sigma^2_{Y_i}$ = Varianza del ítem i.
+* $\sigma^2_X$ = Varianza de las puntuaciones observadas de los individuos.
+
+Como podrás ver, dividimos la sumatoria de las varianzas de los ítems entre la varianza de las puntuaciones observadas de los individuos, ponderada por el número de ítems. Por esta razón, el Alfa de Cronbach tiende a mejorar si aumentamos el número de ítems en una escala, aunque teóricamente su confiabilidad no cambie.
+
+Puedes leer más sobre el Alfa de Cronbach en este artículo de Cortina (1993):
+
+* https://www.psycholosphere.com/what%20is%20coefficient%20alpha%20by%20Cortina.pdf
+
+Y puedes leer sobre las limitaciones y usos no apropiados de este coeficiente en este artículo de Sijtsma (2009):
+
+* https://link.springer.com/content/pdf/10.1007%2Fs11336-008-9101-0.pdf
+
+
+Pasemos a iniciar nuestro análisis de ejemplo.
+
+# Obteniendo nuestros datos: Escala IQ1 para medir inteligencia
+Los datos que usaremos corresponden a un test de inteligencia aplicado en linea  como parte del repositorio **Open Source Psychometrics Project**. 
+
+Este es un conjunto de datos abierto para usos educativos que consiste en las respuesta de 400 personas a 25 ítems. Cada ítem consistía en una secuencia de figuras que la persona debía completar correctamente, eligiendo una de 8 opciones posibles.
+
+Descargamos el archivo con los datos de esta escala usando la función `download.file`.Los datos se descargaran a tu carpeta de trabajo de R (puedes ver cuál es tu carpeta de trabajo usando la función `getwd()`).
+```{r, eval=FALSE}
+download.file(url = "http://openpsychometrics.org/_rawdata/IQ1.zip", 
+              destfile = "IQ1.zip")
+```
+
+Extraemos el contenido del archivo .zip que hemos descargado con `unzip()`.
+```{r, eval=FALSE}
+unzip("IQ1.zip")
+```
+
+Con esto, obtenemos una carpeta con los imágenes usadas en los ítems de la escala (IQ1), un archivo detallando las características de la escala (codebook.txt), y una tabla de datos (data.csv). Este último es el achivo que usaremos,
+
+# Procesando los datos
+Necesitamos que nuestros datos tengan una estructura apropiada para el análisis siguiente estructura:
+
+* Cada **renglón** es una observación (caso)
+* Cada **columna** es una variable (ítem)
+* Cada **celda** es un dato (respuesta)
+
+A esto se le conoce como una estructura rectangular o tabular limpia (*tidy* en inglés). Al trabajar con tus propios datos es recomendable capturarlos usando esta estructura, pero en nuestro caso tenemos que procesar los datos antes de analizarlos.
+
+Comenzamos leyendo nuestros datos con la función `read.csv()` y asignamos el resultado al objeto **iq1**.
+```{r}
+iq1 <- read.csv("IQ1/data.csv")
+```
+
+Veamos las primeras líneas de nuestros datos.
+```{r}
+head(iq1)
+```
+
+Tenemos tres variables con información de identificación de las personas participantes: score, gender y age. Las quitamos de nuestro conjunto de datos pues no son de nuestro interés en este momento.
+```{r}
+iq1[c("score", "gender", "age")] <- NULL
+```
+
+La documentación de nuestros datos indica que una respuesta coficicada con un 10 es un acierto, mientras que valores del 1 al 7 son fallos. También podemos observar que tenemos datos iguales a 0, que podemos corresponden a una respuesta omitida.
+
+Recodificamos los datos para que en todas las columnas tengamos:
+* 0 = Fallo
+* 1 = Acierto
+* NA = Perdido
+
+Usamos `ifelse()` en una función anónima dentro de `lapply()` recodificar.
+```{r}
+iq1 <- data.frame(
+  lapply(iq1,function(x) { 
+    ifelse(x == 10, 1, ifelse(x == 0, NA, 0))
+  })
+)  
+
+```
+
+Vemos el resultado.
+```{r}
+head(iq1)
+```
+
+Hecho esto, podemos continuar.
+
+# Usando la función alpha()
+Con los datos preparados, usamos la función `alpha()` del paquete *psych* para calcular el coeficiente Alfa de Cronbach y algunos otros indicadores de confiabilidad psicométrica.
+
+Si no tenemos instalado el paquete *psych*, que es lo usual en una instalación regular de R, usamos `install.packages(")` para obtenerlo. Necesitamos estar conectados a internet para realizar la instalación.
+```{r, eval = FALSE}
+install.packages("psych")
+```
+
+Pedimos a R que llame a *psych* para usar sus funciones.
+```{r}
+library(psych)
+```
+
+Ahora, llamamos a la función `alpha()` con **iq1** como único argumento y guardamos los resultados en el objeto **alfa** para consultarlos después.
+```{r}
+alfa <- alpha(iq1)
+```
+
+En algunas ocasiones recibiremos un mensaje similar al siguiente.
+`Some items XXX were negatively correlated with the total scale and probably should be reversed. To do this, run the function again with the 'check.keys=TRUE' option`
+
+El mensaje indica que tenemos ítems que "apuntan" en dirección opuesta a la mayoría. Esto puede ocurrir por problemas de codificación o por diseño de la escala. En general no cambiará los resultados obtenidos con `alpha()`, pero vale la pena verificar la codificación de los datos para asegurarnos que son lógicos.
+
+Veamos ahora los resultados más importantes y cómo interpretarlos
+
+# ¿Cómo interpretar los resultados de `alpha()`?
+Llamamos al objeto **alfa** que hemos creado para ver los resultados de `alpha()`,
+```{r}
+alfa
+```
+
+Los resultados estan divididos por secciones. Revisemos lo más relevante de cada una de ellas.
+
+## Reliabilty analysis (análisis de confiabilidad)
+Aquí encontramos el análisis de confiabilidad propiamente dicho. Se nos devuelve el valor del coeficiente Alfa de Cronbach, así como otros estadísticos.
+
+**raw_alpha: Coeficiente Alfa con las puntuaciones observadas.**
+Esta es el valor de Alfa generalmente usado para evaluar la confiabilidad de una escala. Es también el que se reporta en publicaciones y reportes técnicos.
+
+El valor de Alfa puede asumir valores entre 0 y 1. Valores cercanos a 1 son mejores, pues indican mayor consistencia interna. Por convención y para fines prácticos, valores de Alfa iguales o mayores a 0.7 se consideran aceptables, mayores a 0.8 son buenos, y mayores a 0.9 son excelentes.
+
+Valores por debajo de 0.5 y cercanos a 0 indican que una escala tiene una pobre confiabilidad. 
+
+En este ejemplo hemos obtenido 0.84, la cual es bueno.
+
+**std.alpha: Coeficiente alfa con las puntuaciones estandarizadas.**
+
+Este valor se obtiene estandarizando las puntuaciones de la escala antes de calcular Alfa. Es útil cuando nuestros ítems no tienen el mismo rango de valores posibles, pues así evitamos sesgar los resultados.
+
+Por lo general, obtenemos valores que son poco diferentes a los obtenidos con las puntuaciones observadas. En este caso, obtuvimos 0.83.
+
+**G6(smc): Lambda 6 de Guttman ($\lambda6$).**
+
+Esta es otra medida de confiabilidad, obtenida a partir del coeficiente de determinación de cada ítem con respecto a todos los demás, es decir, de correlaciones múltiples al cuadrado. Lambda 6 tiende a ser menos sensible al número de ítems en la escala.
+
+Al igual que Alfa, asume valores de 0 a 1 y para fines prácticos lo interpretamos de la misma manera. Obtuvimos 0.8, el cual es un valor bueno
+
+**average_r: Correlación promedio entre los ítems.**
+
+Es el valor promedio de correlación entre los ítems Entre más cercano sea este valor a 1, los ítems han tenido más asociación entre ellos. 
+
+Hemos obtenido 0.16, lo cual indica que los ítems de la escala. en promedio, tienen una baja aociación entre ellos. 
+
+Este resultado nos ilustra que es posible obtener valores altos de Alfa, aunque los reactivos no tengan correlaciones fuertes entre ellos. Por lo tanto, no podemos asumir que tenemos ítems con una fuerte asociación entre ellos únicamente a partir del valor de Alfa, necesitamos explorar estos resultados primero.
+
+**95% confidence boundaries**
+
+Es el intervalo de confianza al 95% del valor de Alfa calculado. Se nos muestra el valor del límite inferior (*lower*) y superior (*upper*) del intervalo.
+
+Intervalos amplios nos indican que el valor de Alfa tiene un mayor error de medida, por lo que debemos ser cuidadosos en las interpretaciones que hagamos y las decisiones que tomemos.
+
+## Reliability if an item is dropped (Confiabilidad si un ítem es quitado)
+Esta tabla nos muestra cómo cambiaría Alfa y los demás indicadores de confiabilidad si un ítem se quita de la escala analizada.
+
+Por ejemplo, si quitamos el ítem **Q1**, el valor de Alfa se reduce de 0.84 a 0.83,la confiabilidad de nuestra escala empeora si quitamos este ítem.
+
+Habrá casos en los que Alfa mejora al quitar un ítem. La decisión de efectivamente quitar un ítem depende de que tanto mejora la confiabilidad y en qué medida se afecta la validez de la escala. 
+
+Este puede convertirse en un proceso iterativo, en el que después de quitar ítems, volvemos a calcular el Alfa de Cronbach, y nos encontramos que aún puede mejorar nuestra confiabilidad quitando un ítem distinto.
+
+Es necesario considerar las características particulares de cada escala para encontrar un balance entre ganancias o perdidas en confiabilidad y la integridad de la escala. También es necesario tomar en cuenta los demás resultados reportados en este análisis con respecto a cada ítem.
+
+Supongamos que tomamos la decisión de quitar el ítem **Q21** de la escala. Lo que hacemos es crear una copia de nuestra escala sin ese ítem y volver a usar `alpha()` para obtener nuevos resultados.
+```{r}
+iq1_sin_Q21 <- iq1
+iq1_sin_Q21["Q21"] <- NULL
+alfa_sin_Q21 <- alpha(iq1_sin_Q21)
+```
+
+## Item satistics (estadisticas de item)
+Esta tabla nos presenta las correlaciones (**r**) de los ítems con la puntuación total de la escala. Valores más cercanos a 1 indican una asociación más fuerte entre ítem y puntuación.
+
+Esta es una tabla útil para tomar decisiones sobre los reactivos. Por ejemplo, los ítems **Q21** y **Q22** tiene correlaciones bajas (0.13) con la puntuación de la escala, por lo que valdría la pena analizarlos con mayor detalle. Idealmente, esperamos que los ítems tengan una buena asociación con la puntuación de la escala a la que pertenecen.
+
+## Non missing response frequency for each item (Frecuencia de respuesta no perdida para cada ítem)
+Por último, tenemos la proporción de respuesta para cada opción posible para cada uno de los ítems, incluidas las respuestas perdidas.
+
+Por ejemeplo, para el ítem **Q1**, 11% de las respuestas fueron 0, 89% fueron 1 y 2% fueron perdidas.
+
+Esta información es útil para el análisis de resultados inusuales. En nuestro caso, el ítem **Q21**, que tuvo baja correlación con la puntuación de la escala, tuvo también la tasa de respuestas perdidas más alta de todas, 17%. Lo anterior nos llama la atención a analizar con cuidado a este ítem en particular.
+
+# Para concluir
+En este artículo hemos revisado obtener el coeficiente Alfa de Cronbach usando R y el paquete *psych*, así como la manera de interpretar este coeficiente y los resultados asociados a él más relevantes. También pudimos vimos de manera general como los resultados obtenidos de la función `alpha()` nos pueden ayudar a un mejor análisis de la confiabilidad e una escala. 
+
+Es importante recordar qué puede y qué no puede decirnos el coeficiente Alfa de Cronbach con respecto a una escala psicométrica, para evitar malas interpretaciones. El Alfa de Cronbach nos da una medida de la consistencia interna de una escala, que sus ítems apuntan en la misma dirección, pero no nos dice nada sobre su validez o la calidad de sus reactivos. Estas son características diferentes de las escalas que requieren de análisis diferentes.
+
+# Referencias
+* Cortina, J. M. (1993). What is Coefficient Alpha? An Examination of Theory and Applications. *Journal of Applied Psychology*, 78(1), 98-104.
+* Graham, J. M. (2006). Congeneric and (Essentially) Tau-Equivalent Estimates of Score Reliability: What They Are and How to Use Them. *Educational and Psychological Measurement*, 66(6), 930-944.
+* Sijtsma, K. (2009). On the Use, the Misuse, and the Very Limited Usefulness of Cronbach's Alpha. *Psychometrika*, 74(1), 107-120.
+
+***
+
+Consultas, dudas, comentarios y correcciones son bienvenidas:
+
+* jboscomendoza@gmail.com
+
+El código y los datos usados en este documento se encuentran en Github:
+
+* https://github.com/jboscomendoza/rpubs/tree/master/red_semantica
