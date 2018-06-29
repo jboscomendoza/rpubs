@@ -1,7 +1,7 @@
 library(tidyverse)
 library(psych)
 
-download.file("", destfile = )
+download.file("https://github.com/jboscomendoza/rpubs/raw/master/pca_superheroes/superhero-set.zip", destfile = "superhero-set.zip")
 
 unzip("superhero-set.zip")
 
