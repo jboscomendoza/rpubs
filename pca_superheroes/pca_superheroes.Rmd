@@ -1,0 +1,434 @@
+---
+title: "Análisis de Componentes Principales para clasificar superhéroes"
+author: "Juan Bosco Mendoza Vega"
+date: "28 de junio de 2018"
+output: 
+  html_document: 
+    df_print: tibble
+    fig_height: 4
+    fig_width: 8
+    highlight: kate
+    theme: yeti
+    toc: yes
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Soy aficionado a los superhéroes. Muy aficionado. Hasta podría  atribuir mi gusto a la lectura a los cómics de Superman y Batman cuando era pequeño, y que haya sobrevivido a la pubertad y adolescencia a los cómics de los X-Men.
+
+Así que, cuando me encontré con un conjunto de datos con información de superhéroes y sus poderes, se me ocurrió que sería el pretexto perfecto para hablar sobre el Análisis de Componentes Principales y cómo podemos usarlo para caracterizar o clasificar datos.
+
+Hasta podríamos ser ambiciosos y decir que esta es una forma no supervisada de aprendizaje automático, pero nos basta saber que con Análisis de Componentes Principales tenemos una herramienta para entender y describir mejor nuestros datos.
+
+En este documentos revisaremos como implementar el Análisis de Componentes Principales usando el paquete **psych** de R, y de paso aprenderemos un poco más sobre los superhéroes de DC Comics y Marvel Comics.
+
+
+# Una introducción (muy) informal al Análisis de Componentes Principales
+El Análisis de Componentes Principales es, en realidad, un procedimiento bastante complejo que involucra álgebra lineal y tiene diferentes usos e interpretaciones dependiendo del campo de aplicación.
+
+Introducciones formales al PCA pueden ser encontradas en los siguientes enlaces:
+  
+  * https://www.pmrjournal.org/article/S1934-1482(14)00069-0/pdf
+* https://arxiv.org/pdf/astro-ph/9905079.pdf
+* http://people.tamu.edu/~alawing/materials/ESSM689/pca.pdf 
+
+Nosotros utilizaremos PCA como una manera de encontrar una estructura subyacente a nuestros datos. Específicamente, vamos a explorar la posibilidad de que los poderes de los superhéroes de DC y Marvel forman grupos que pueden caracterizar a los personajes.
+
+Partimos de tres supuesto generales.
+
+* Nuestras variables tienen correlaciones entre sí
+* Estas correlaciones entre variables forman grupos, llamados componentes, pues "apuntan" en la misma dirección
+* Los componentes que se forman son diferentes entre sí
+
+Es decir, suponemos hay poderes relacionados entre sí, por ejemplo, volar y tener fuerza sobrehumana o súper velocidad y resistencia física sobrehumana. 
+
+Suponemos que esos poderes pueden agruparse entre sí, y que esos grupos no son iguales. Podríamos decir que esos grupos, o componentes, corresponden a un arquetipo de superhéroe. En este ejemplo, poderes de "superhumano" y poderes de "velocista".
+
+Entonces, **con estos componentes podríamos clasificar a nuestros superhéroes en diferentes arquetipos**, Flash como "velocista", Sentry como "superhumano", etcétera.
+
+Veamos si lo logramos, empezando por preparar nuestro entorno de trabajo.
+
+# Paquetes necesarios
+Estos son los paquetes que utilizaremos.
+
+* **tidyverse**: Como de costumbre, usaremos la familia de paquetes tidyverse para importar, manipular, procesar, visualizar y exportar datos.
+* **psych**: Un paquete dedicado a funciones psicométricas. Utilizaremos su implementación de Análisis de Componentes Principales.
+
+```{r, message=FALSE}
+library(tidyverse)
+library(psych)
+```
+
+Si no cuentas con estos paquetes, puedes instalarlos con `install.packages()`.
+
+# Lectura de datos
+
+Usaremos el conjunto de datos "Super Hero Dataset", disponible en [Kaggle](http://www.kaggle.com). 
+
+* https://www.kaggle.com/claudiodavi/superhero-set
+
+He alojado una copia de estos datos en Github que puede ser descargada usando `download.file()`
+```{r, eval = FALSE}
+download.file("https://github.com/jboscomendoza/rpubs/raw/master/pca_superheroes/superhero-set.zip", destfile = "superhero-set.zip")
+```
+
+De esta manera obtenemos un archivo .zip. Extraemos su contenido en nuestra carpeta de trabajo con `unzip()`.
+
+```{r, eval = FALSE}
+unzip("superhero-set.zip")
+```
+
+Esto nos dejará con dos archivos:
+  
+  * **heroes_information.csv** que contiene los nombres de los personajes, su información biográfica, características físicas y editorial que los publica.
+* **super_hero_powers.csv** que contiene los nombres de los personajes y los poderes que poseen.
+
+
+# Importación de los datos
+Para este análisis, usaremos los datos de sólo dos editoriales: DC Comics y Marvel Comics. Esto, por dos razones.
+
+En primer lugar, porque estas dos editoriales son las más grandes y tienen una larga tradición publicando cómics de superhéroes, sus personajes tienden a seguir una línea editorial más o menos consistente; en segundo lugar, dado que conozco mejor a los personajes de estas dos editoriales, es más fácil que interprete los resultados y juzgue si tienen sentido o no. Como siempre, el conocimiento disciplinar es importante.
+
+Empezamos por importar la información de los superhéroes.
+
+Usamos la función `read_csv()` de **readr** para leer los archivos .csv, después `select()` de **dplyr** para elegir las columnas que conservaremos (nombre del personaje y editorial), y por último `filter()`, también de **dplyr** para filtrar sólo los datos de las editoriales DC y Marvel.
+
+```{r}
+dc_marvel <-
+  read_csv("heroes_information.csv") %>%
+  select(name, Publisher) %>%
+  filter(Publisher %in% c("DC Comics", "Marvel Comics"))
+
+# Resultados
+dc_marvel
+```
+
+Importamos los poderes de los personajes.
+```{r}
+heroe_poderes <- read_csv("super_hero_powers.csv")
+
+# Resultados
+heroe_poderes
+```
+
+Como en este segundo conjunto de datos no tenemos un identificador de editorial, filtramos utilizando los datos de **dc_marvel** para quedarmos con los personajes de DC y Marvel.
+```{r}
+heroe_poderes <-
+  heroe_poderes %>%
+  filter(hero_names %in% dc_marvel$name)
+```
+
+El siguiente paso es procesar nuestros datos para el análisis.
+
+# Procesamiento de los datos
+Los nombres de nuestros datos nos darán problemas más adelantes si los dejamos como están. Los espacios en los nombres de columnas pueden producir errores o comportamientos imprevistos, así que los quitaremos, lo mismo que el resto de signos de puntuación. Ambos serán reemplazados por guiones bajos ("_") usando **Regular Expressions** (regex) y la función `gsub()`.
+```{r}
+names(heroe_poderes) <-
+  names(heroe_poderes) %>%
+  tolower() %>%
+  gsub("\\W+", "_", .)
+```
+
+Creamos dos data frames diferentes, una con los nombres de los personajes y otra con los poderes.
+```{r}
+# Personajes
+heroe <- select(heroe_poderes, hero_names)
+
+# Poderes
+poderes <- select(heroe_poderes, -hero_names)
+```
+
+## Poderes escasos y abundantes
+Como vimos más arriba, los poderes que tienen los personajes están codificados como cadenas de texto "True" y "False", recodificamos a 1 y 0, respectivamente, para poder hacer cálculos numéricos.
+```{r}
+poderes <-
+  map_df(poderes, ~ifelse(. == "True", 1, 0))
+```
+
+Hecho esto, podemos calcular cuántos personajes tienen un poder en particular a partir de la suma de valores de una columna. Veamos cuántos personajes tienen "grito sónico".
+```{r}
+sum(poderes$sonic_scream)
+```
+
+Podríamos apostar a que uno de ellos es "Banshee".
+
+Usando `map()` de **dplyr**, obtenemos la suma anterior para todos los poderes. De esto sabremos cuáles poderes son los más y menos comunes. Con esta información podremos detectar *outliers*: poderes muy raros o muy comunes.
+
+Si omitimos estos poderes al realizar PCA obtendremos mejores resultados, pues los este método es sensible a valores extremos.
+```{r}
+index_poderes <- map_dbl(poderes, sum)
+```
+
+Veamos la distribución de los poderes con una curva de densidad.
+```{r}
+plot(density(index_poderes), main = "Frecuencia de poderes")
+```
+
+Ahora veamos los cinco poderes más y menos comunes, con ayuda de  `sort()` y `head()`.
+```{r}
+# Más comunes
+head(sort(index_poderes, decreasing = TRUE), 5)
+
+# Menos comunes
+head(sort(index_poderes), 5)
+```
+
+Tenemos poderes que ningún personaje en nuestros datos posee, así que podemos omitirlos sin ningún problema. También podemos omitir aquellos poderes que sólo aparecen en una ocasión, pues es probable que tampoco aporten mucha información.
+
+También tenemos poderes que más de 200 personajes poseen. Esto es casi 30% de nuestros personajes. Estos poderes quizás no ayuden a crear grupos distintos entre sí, así que haremos el análisis sin ellos.
+
+La manera de quitar estos poderes es un poco enredada, pero consiste en usar sus índices de posición en el vector **index_poderes**, para así hacer una selección de columnas a conservar.
+```{r}
+poderes <- poderes[(index_poderes > 4 & index_poderes < 150)]
+
+# Tamaño nuevo de poderes
+dim(poderes)
+
+# Histograma nuevo de poderes
+map_dbl(poderes, sum) %>% 
+  density() %>% 
+  plot(main = "Frecuencia de poderes")
+```
+
+## Personajes muy poderosos
+También quitaremos  a los personajes que no tiene ningún poder y a aquellos que tienen un número muy alto de ellos. Estos datos también pueden ser considerados como  **outliers**. 
+
+Para descubrir quienes son estos personajes, usamos la función `rowSums()`.
+```{r}
+index_heroe <- rowSums(poderes)
+
+# Resutlado
+index_heroe
+```
+
+Obtenemos una vector en el que cada valor representa el total de poderes por renglón, esto es, los poderes que posee cada personaje.
+
+Demos un vistazo a cómo se distribuyen estos valores.
+```{r}
+plot(density(index_heroe), "Distribución de héroe")
+```
+Más de treinta parece un abuso de poder, así que quitemos a esos personajes de nuestros datos (si te da curiosidad, son Amazo y Spectre).
+
+Hacemos el filtrado, usando nuestro vector **index_heroe** para seleccionar los renglones que deseamos conservar.
+```{r}
+heroe <- heroe[index_heroe > 0 & index_heroe < 30, ]
+
+# Tambien lo tenemos que hacer con poderes para que coincidan los tamaños de las tablas
+poderes <- poderes[index_heroe > 0 & index_heroe < 30, ]
+
+# Nueva distribución
+rowSums(poderes) %>% 
+  density() %>% 
+  plot(main = "Distribución de héroe - Nuevo")
+```
+
+Ya estamos listos para para realizar PCA.
+
+# Análisis de Componentes Principales (PCA)
+La implementación de PCA que usaremos requiere que especifiquemos **a priori** el número de componentes a extraer. Esto es algo que desconocemos. 
+
+Hay distintas maneras de llegar a un número razonable, que van desde partir de conocimiento disciplinario, hasta realizar manualmente múltiples análisis y elegir aquel que dé mejores resultados.
+
+Nosotros haremos algo más eficiente.
+
+## Very Simple Structure
+Para obtener un diagnóstico del número de componentes que podemos extraer, utilizaremos **Very Simple Structure (VSS, Estructura Muy Simple)**. Este métodos trata de encontrar una estructura que explique la mayor proporción de varianza, con la menor complejidad posible. 
+
+Puedes leer más al respecto aquí:
+  
+  * https://personality-project.org/revelle/publications/vss.pdf 
+
+Llamamos a VSS usando la función `vss()` de **psych**.
+```{r}
+poderes_vss <- vss(poderes)
+
+# Nuestro resultado
+poderes_vss
+```
+
+Estos resultados nos indican que VSS nos propone una estructura de **ocho componentes**. Probemos con ella
+
+## Ejecutando PCA
+Usamos la función `pca()` de **psych**, aplicada a nuestro objeto **poderes** y con el argumento `nfactors = 8` para ejecutar este procedimiento.
+```{r}
+poderes_pca <- pca(r = poderes, nfactors = 8)
+```
+
+Puedes llamar al objeto **poderes_pca** para ver los resultados del PCA. Como es una salida extensa por el número de variables que tenemos, he decidido no mostrarla para hacer más legible este documento, pero tu puedes visualizarla si así lo deseas.
+
+Obtenemos, entre otras cosas, las cargas de cada variable en cada componente. Podemos usarlas para comprobar que la correlación entre componentes sea baja.
+
+Usamos `cor()` para verificar.
+```{r}
+cor(poderes_pca$weights) %>% round(2)
+```
+
+La correlación más alta que tenemos es 0.38 entre el componente 1 y el 4, de modo que podemos decir que nuestros componentes son más o menos independientes entre sí.
+
+Pero veamos algo mucho más interesante con las cargas de los componentes.
+
+## Cargas o pesos de los componentes
+El principal resultado de PCA son las cargas o pesos que cada una de nuestras variables tiene con respecto a cada componente.
+
+Podemos extraer del objeto **poderes_pca** y transformarlo a un data frame. Usamos la función `rownames_to_column()` de **tibble** para conservar los nombres de cada columna.
+```{r}
+poderes_loadings <-
+  poderes_pca$weights %>%
+  data.frame() %>%
+  rownames_to_column("poder") %>%
+  tbl_df()
+
+# Nuestro resultado
+poderes_loadings
+```
+El resultado es un data frame en el que los renglones son las variables, poderes en nuestro caso, y las columnas son los componentes. En cada celda se encuentra un número, que indica la carga que tiene la variable con el componente.
+
+Entre mayor sea el valor de la carga de una variable con un componente, es mayor su relación con este. Los valores están expresados en puntuaciones estandarizadas Z, con media 0 y desviación estándar 1, por lo tanto tenemos positivos y negativos.
+
+Para ilustrar esto, veamos los ocho componentes con los poderes que tienen las cargas más altas con ellos. Deberíamos observar poderes relacionados entre sí.
+
+Usamos la función `map()` de **purrr** con los nombres de las columnas en nuestro data frame para obtener con una función anónima los poderes con mayor carga en cada componente. Nos apoyamos con la función `arrange()` de **dplyr**.
+```{r}
+names(poderes_loadings[-1]) %>%
+  map(function(x){
+    poderes_loadings %>%
+      select(poder, factor = x) %>%
+      arrange(desc(factor))
+  })
+```
+
+De un vistazo general, podemos identificar patrones al mostrar los poderes de esta manera. Por ejemplo, el primer componente parece haber agrupado poderes relacionas con sentidos sobrehumanos, en particular la visión; el tercero parece agrupar poderes psíquicos; y el sexto a habilidades relacionadas con energía de todo tipo.
+
+Cabe señalar que de estos ocho componentes obtenidos, el primero es el que explica la mayor proporción de la varianza, seguido del segundo, después el tercero y así sucesivamente. 
+
+En nuestro caso esto implica que el primer componente caracteriza de una manera más cohesiva y clara a los poderes que el octavo. Esto es, podremos describir mejor a los superhéroes que compartan los poderes del primer componente que del octavo.
+
+Guardemos de una vez un vector con los nombres posibles para cada uno de estos componentes y los asignamos al objeto **poderes_loading**.
+```{r}
+poderes_nombres <- c("super_ojos", "divino", "psiquico", "spider_man",
+                     "acuatico", "energia", "ladrillo", "vigilante")
+
+# Asignamos nombres
+names(poderes_loadings) <- c("poder", poderes_nombres)
+```
+
+## Puntuaciones de cada componente
+Podemos obtener una puntuación o score por componente de cada renglón. En nuestro caso, entre más alto sea esta puntuación, más relacionado está el conjunto de poderes de un personaje con cada componente en particular. 
+
+Esta información se encuentra almacenada en el objeto **poderes_scores** y también está expresada como una puntuación Z.
+
+Extraemos la puntuación y la re escalamos a una media 500 y desviación estándar 100 para facilitar su interpretación. También le ponemos a cada columna el nombre provisional que tenemos a cada componente.
+```{r}
+poderes_scores <-
+  ((poderes_pca$scores * 100) + 500) %>%
+  tbl_df() %>%
+  bind_cols(heroe, .)
+
+# Asignación de nombre
+names(poderes_scores) <- c("heroe", poderes_nombres)
+
+# Resultado
+poderes_scores
+```
+
+De manera similar a como lo hicimos con los las cargas, podemos ver los personajes con las puntuaciones más altas en cada uno de los componentes usando sus nombres.
+```{r}
+names(poderes_scores[-1]) %>%
+  map(function(x){
+    poderes_scores %>%
+      select(heroe, Score = x) %>%
+      arrange(desc(Score))
+  }) %>% {
+    names(.) <- poderes_nombres
+    .
+  }
+```
+
+Definitivamente estamos observando patrones. Por ejemplo, el primer componente, efectivamente agrupa a personajes con sentidos sobrehumanos, en especial visión. Esto es característico de los personajes Kryptonianos, así que allí nos encontramos a Supergirl, Superman y Zod, entre otros. 
+
+El resto de los componentes también tienen sentido, algunos más que otros, pero en general estamos observando regularidades.
+
+De hecho, podemos cambiar los nombres de los componentes a otros más apropiados, que corresponden a arquetipos de poderes.
+```{r} 
+poderes_nombres <- c("superman", "omnipotente", "psiquico", "spiderman",
+                     "animal", "energia", "titan", "vigilante")
+
+# Renombramos las columnas de poderes_scores
+names(poderes_scores) <- c("heroe", poderes_nombres)
+```
+Ahora sí, podemos clasificar a nuestros superhéroes.
+
+# Puntuación de componente para clasificar
+Podemos determinar a qué arquetipo pertenece un personaje usando su puntuación. Si nuestros componentes efectivamente reflejan una estructura subyacente de nuestros datos, podremos caracterizar con mayor precisión a los superhéroes.
+
+Empecemos analizando las puntuaciones de Colossus, un X-Men cuyo poder mutante le otorga piel metálica, fuerza y resistencia sobrehumanas, así como un poco de invulnerabilidad.
+```{r}
+filter(poderes_scores, heroe == "Colossus")
+```
+
+Colossus tiene su puntuación más alta, de manera considerable, en el componente "titan", lo cual es consistente con lo que sabemos de él.
+
+En segundo lugar se encuentra el arquetipo "animal", "seguido de "spiderman", lo cual no es muy claro por qué ha ocurrido. Sin embargo, la puntuación en "titan" es tan alta, que nos deja claro cómo clasificaríamos a Colossus.
+
+Probemos con otro personaje. Black Lightning es un superhéroe que puede controlar la electricidad, además de que es capaz de volar y resistir ataques de energía, por lo tanto, esperaríamos encontrarlo precisamente en el componente "energia".
+```{r}
+filter(poderes_scores, heroe == "Black Lightning")
+```
+
+¡Excelente! La puntuación más alta para Black Lightning está en "energia". Esta ocasión tuvimos una puntuación cercana en "titan", que es un poco enigmático.
+
+Lo anterior nos ilustra que esta forma de clasificación no es perfecta. Tendremos mejores resultados para aquellos personajes con más poderes con cargas altas en componentes específicos.
+
+## Sistematizando la clasificación
+Podemos crear una pequeña función para determinar a qué grupo es posible que pertenezca un personaje a partir de sus puntuaciones. 
+
+Esta función, nos devolverá los tres componentes en los que un personaje tiene las puntuaciones más altas, aunque dejamos argumento para que nos devuelva más o menos componentes.
+
+Nuestra función usa las funciones `gather()` de **tidyr** para convertir nuestros datos de un formato ancho a uno alto, y `arrange()` y `top_n()` de **dplyr** para ordenar y seleccionar renglones.
+
+Además, obtendremos una columna llamada "diferencia", que nos mostrará la diferencia entre cada puntuación y la puntuación más alta de todas, determinada usando `first()` de **dplyr**. Entre mayor sea la diferencia, tendremos más confianza en la clasificación.
+```{r}
+obten_tipo <- function(nombre, cuantos = 3) {
+  poderes_scores %>% 
+    filter(heroe == nombre) %>% 
+    gather(componente, score, superman:vigilante) %>% 
+    arrange(desc(score)) %>% 
+    top_n(wt = score, n = cuantos) %>% 
+    mutate(diferencia = score - first(score))
+}
+```
+
+Probemos con cuatro personajes diferentes.
+```{r}
+c("X-23", "Punisher", "Stargirl", "Swamp Thing") %>% 
+  map(obten_tipo)
+```
+
+De nuevo, no es una clasificación perfecta, pero es un buen punto de partida.
+
+# Conclusiones
+
+En este artículo revisamos una aplicación del Análisis de Componentes Principales (PCA) para encontrar una estructura subyacente en nuestros, si es que esta existe. Además vimos cómo podemos aprovechar esta estructura para entender mejor nuestros datos e incluso para caracterizar los casos con los que contamos.
+
+En nuestro caso, tuvimos cierto éxito con los poderes de los superhéroes, lo cual no es por completo una sorpresa. Hay ciertos poderes que son necesarios para que otros funcionen. Un personaje con súper fuerza que tenga también súper resistencia, destruiría su cuerpo utilizando sus habilidades, algo que [My Hero Academia](https://en.wikipedia.org/wiki/My_Hero_Academia) ha demostrado recientemente.
+
+Si tienes familiaridad con el Análisis Factorial Exploratorio (EFA) la manera en la que hemos usado PCA te sonará peculiar, en especial por las interpretaciones que hacemos de sus resultados. En teoría, PCA no nos permite caracterizar rasgos latentes, para ello usamos EFA.   
+
+También puede que te llame la atención no nos aseguramos de cumplir los supuestos de los datos para realizar un PCA. 
+
+Esto es, en realidad sumamente interesante. Hice pruebas con EFA, de los cuales obtuve resultados prácticamente iguales a los aquí mostrados. También en un principio pensé que dado que los datos con los que contamos son binarios sería necesario usar una matriz de correlación tetracórica o que PCA no llegaría a convergencia. Sin embargo, usando el coeficiente R de Pearson función razonablemente bien.
+
+No tengo una respuesta definitiva a lo anterior, pero es algo que sobre lo que vale la pena indagar.
+
+---
+
+Consultas, dudas, comentarios y correcciones son bienvenidas:
+
+* jboscomendoza@gmail.com
+
+El código y los datos usados en este documento se encuentran en Github:
+
+*  https://github.com/jboscomendoza/rpubs/tree/master/pca_superheroes
+
