@@ -1,5 +1,7 @@
 # Paquetes
 library(tidyverse)
+library(igraph)
+library(ggraph)
 
 pokemon <- read_csv("pokemon.csv")
 
@@ -70,7 +72,7 @@ poke_fuerza %>%
   theme_graph()
 
 
-plot(poke_fuerza, layout = layout.circle(poke_tipos),
+plot(poke_fuerza, layout = layout.circle(poke_fuerza),
      edge.arrow.size = .1,
      vertex.size = 28, vertex.color = "#ffffff",
      edge.color = "#333300", vertex.label.color = "black",
@@ -112,3 +114,15 @@ poke_fuerza %>%
   scale_edge_color_manual(values = c("#ddbbbb", "#00ccbb"))
 
 
+pokemon %>% 
+  count(type1, type2) %>%
+  filter(n > 3) %>% 
+  na.omit() %>% 
+  graph_from_data_frame() %>% 
+  ggraph(layout = "linear", circular = TRUE) +
+  geom_edge_arc(aes(color = n, end_cap = label_rect(node2.name)), 
+                 arrow = arrow(length = unit(1.5, "mm"))) +
+  geom_node_label(aes(label = name)) +
+  theme_void()
+
+                 
