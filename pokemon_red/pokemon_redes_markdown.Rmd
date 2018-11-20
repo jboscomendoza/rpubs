@@ -1,0 +1,277 @@
+---
+title: "Redes relacionales con R"
+output:
+  html_document:
+    df_print: tibble
+    fig_height: 7
+    fig_width: 8.5
+    highlight: haddock
+    theme: yeti
+---
+
+Las redes relacionales son una manera de visualizar información muy útil para datos cualitativos y cuantitativos.
+
+Para ello usaremos datos de los juegos de los juegos de Pokemon.
+
+# Paquetes necesarios
+
+Utilizaremos los siguientes paquetes para este análisis.
+
+* *tidyverse* - Una familia de paquetes para importar, procesar, visualizar y exportar datos de forma ordenada.
+* *igraph* - Este paquete nos ayudará a transformar data frames en datos apropiados para generar redes relacionales.
+* *ggraph* - Un agregado al paquete *ggplot2* de *tidyverse* que contiene las funciones necesarias para visualizar redes relacionales.
+
+Como siempre, si no cuentas con alguno de estos paquetes puedes usar la función `install.packages()` para instalarlos.
+
+Cargamos los paquetes a nuestro espacio de trabajo con `library()`.
+```{r paquetes, message=FALSE}
+library(tidyverse)
+library(igraph)
+library(ggraph)
+```
+
+# Descarga de datos
+Usaremos la copia de un conjunto de datos publicado originalmente en Kaggle. Este conjunto contiene datos de 800 especies de pokemon distintas con varias características para cada uno de ellos.
+
+The Complete Pokemon Dataset:
+
+* https://www.kaggle.com/rounakbanik/pokemon
+
+Descargaremos este conjunto de datos desde Github y obtenemos como resultado el archivo "pokemon.csv".
+```{r descarga_pokemon, eval=FALSE}
+download.file(
+  url = "https://raw.githubusercontent.com/jboscomendoza/rpubs/master/pokemon_red/pokemon.csv", 
+  destfile = "pokemon.csv")
+```
+
+# Lectura de datos
+Como tenemos un archivo con extensión .csv, usamos la función `read_csv`.
+```{r leer_pokemon, message=FALSE}
+pokemon <- read_csv("pokemon.csv")
+```
+
+Veamos nuestro resultado.
+```{r ver_pokemon}
+pokemon
+```
+
+# Procesamiento de datos
+Ahora sí, empezamos con lo interesante, procesar los datos.
+```{r poke_fuerza}
+poke_fuerza <-
+  pokemon %>%
+  filter(is.na(type2)) %>%
+  select(tipo = type1, starts_with("against")) %>%
+  gather("enemigo", "modificador", against_bug:against_water) %>%
+  mutate(enemigo = gsub("against_", "", enemigo),
+         enemigo = gsub("fight", "fighting", enemigo)) %>%
+  distinct() %>%
+  filter(modificador != 1) %>%
+  mutate(Relacion = ifelse(modificador < 1, "Debil", "Fuerte")) %>%
+  select(enemigo, tipo, modificador, Relacion) %>%
+  graph_from_data_frame()
+```
+
+Veamos la clase del objeto que hemos creado con `graph_from_data_frame()`.
+```{r class_poke_fuerza}
+class(poke_fuerza)
+```
+
+Ahora que tenemos un objeto de clase *igraph* que podemos crear visualizaciones de redes relacionales. Para ello, tenemos dos métodos:
+
+* La función *plot()*
+* El paquete *ggraph*
+
+# Generación de redes relacionales usando *plot()*
+Para crear la visualización de una red relacional con *plot()*, debemos cargar primero el paquete *igraph*, de este modos se anexan nuevos métodos a esta función. 
+
+Hecho esto, basta con usar nuestro objeto *igraph* como argumento para `plot()`.
+```{r plot_simple}
+plot(poke_fuerza)
+```
+
+Obtenemos una visualización bastante aceptable considerando el mínimo esfuerzo invertido en crearla. Tenemos una buena representación de las uniones y nodos de nuestra red, así como de la direccionalidad de las uniones.
+
+Podemos ajustar la manera
+
+```{r plot_argumentos}
+poke_fuerza%>%
+  plot(layout = layout_with_graphopt, edge.arrow.size = 0.15)
+```
+
+
+Es posible lograr un control más fino de la visualización obtenida. Por ejemplo, podemos obtener una red circular con esferas en los nodos.
+```{r}
+plot(poke_fuerza, layout = layout.circle(poke_fuerza),
+     edge.arrow.size = .1,
+     vertex.size = 28, vertex.color = "#ffffff",
+     edge.color = "#333300", vertex.label.color = "black",
+     vertex.shape = "sphere")
+```
+
+# Generación de redes relacionales con *ggraph*
+Todas las redes relacionales generadas con *ggraph* necesitan de especificaciones las uniones (edges) y los nodos (nodes). Es indispensable contar con al menos una de estas especificaciones para generar una red, pero no es absolutamente necesario contar con ambas.
+
+Por ejemplo, así luce una visualización usando únicamente uniones.
+```{r ggraph_solo_edge}
+poke_fuerza%>%
+  ggraph() +
+  geom_edge_link() +
+  theme_graph()
+```
+
+Ahora veamos qué pasa si generamos una visualización sólo con nodos.
+```{r ggraph_solo_nodo}
+poke_fuerza%>%
+  ggraph() +
+  geom_node_point() +
+  theme_graph()
+```
+
+Por supuesto, una visualización que incluya uniones y nodos se vería como la combinación de las dos visualizaciones anteriores.
+```{r ggraph_simple}
+poke_fuerza%>%
+  ggraph() +
+  geom_edge_link() +
+  geom_node_point() +
+  theme_graph()
+```
+
+Habrás notado que aparece el siguiente mensaje al generar las redes anteriores: `## Using `nicely` as default layout`.
+
+Al crear una red podemos elegir entre diferentes formas para distribuir nuestra red o "*layouts*". *nicely* es un *layout* que intenta distribuir de manera uniforme los nodos y uniones de nuestras redes, pero tenemos más opciones.
+
+El *layout* *linear* ordena todos los nodos en una línea recta.
+```{r pokemon_linear}
+poke_fuerza%>%
+  ggraph(layout = "linear") +
+  geom_edge_link() +
+  geom_node_label(aes(label = name)) +
+  theme_graph()
+```
+
+El resultado es una gráfica poco informativa, pues no son visibles las uniones entre nodos. 
+
+Para solucionar este problema, cambiamos `geom_edge_link()` por `geom_edge_arc()`. De esta manera, reemplazamos uniones con líneas rectas por uniones en forma de arco.
+```{r pokemon_linear_arc}
+poke_fuerza%>%
+  ggraph(layout = "linear") +
+  geom_edge_arc() +
+  geom_node_label(aes(label = name)) +
+  theme_graph()
+```
+
+Esta es una visualización que resulta útil cuando tenemos muchas relaciones de recoprocidad, difíciles de colocar de manera uniforme en un plano.
+
+Otro *layout* es *circle*, que coloca a todos los nodos formando un círculo.
+```{r}
+poke_fuerza %>%
+  ggraph(layout = "circle") +
+  geom_edge_link() +
+  geom_node_label(aes(label = name)) +
+  theme_graph()
+```
+
+# Layout con arcos
+```{r}
+poke_fuerza %>%
+  ggraph(layout = "linear") +
+  geom_edge_arc(aes(color = Relacion, end_cap = label_rect(node2.name)),
+                arrow = arrow(type = "closed", length = unit(1.5, "mm"))) +
+  geom_node_point() +
+  geom_node_label(aes(label = name)) +
+  facet_grid(Relacion~.) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+# Layout en circulo
+```{r}
+poke_fuerza %>%
+  ggraph(layout = "circle") +
+  geom_edge_link(aes(color = Relacion),
+                 arrow = arrow(type = "closed", length = unit(1.5, "mm"))) +
+  geom_node_label(aes(label = name), vjust = 1) +
+  facet_wrap("Relacion") +
+  theme_void() +
+  theme(legend.position = "none") +
+  scale_edge_color_manual(values = c("#ddbbbb", "#00ccbb"))
+```
+
+# Layout normal
+```{r}
+poke_fuerza %>%
+  ggraph() +
+  geom_edge_loop(aes(color = Relacion)) +
+  geom_edge_fan(arrow = arrow(type = "closed", length = unit(1.5, "mm")),
+                aes(end_cap = label_rect(node2.name), color = Relacion)) +
+  geom_node_label(aes(label = name)) +
+  theme_void() +
+  theme(legend.position = "top") +
+  scale_edge_color_manual(values = c("#ddbbbb", "#00ccbb"))
+```
+
+```{r}
+pokemon %>%
+  count(type1, type2) %>%
+  filter(n > 3) %>%
+  na.omit() %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "linear", circular = TRUE) +
+  geom_edge_arc(aes(color = n, end_cap = label_rect(node2.name)),
+                 arrow = arrow(length = unit(1.5, "mm"))) +
+  geom_node_label(aes(label = name)) +
+  theme_void()
+```
+
+```{r habilidades}
+pokemon$abilities[pokemon$name == "Starmie"]
+```
+
+```{r}
+pokemon_habilidades <-
+  pokemon %>%
+  select(name, type1, type2, abilities) %>%
+  mutate_at("abilities", function(x) {
+    gsub("(\\[|\\'|\\]|,)+", "_", x) %>%
+      gsub("^_|_$", "", .) %>%
+      gsub("_ _", "_", .) %>%
+      trimws()
+  }) %>%
+  separate(col = "abilities", into = c(letters[1:6]), sep = "_") %>%
+  mutate_at(letters[1:6], as.factor) %>%
+  gather("Orden_H", "Habilidad", a:f) %>%
+  gather("Orden_T", "Tipo", type1, type2) %>%
+  select(Tipo, Habilidad, name) %>%
+  na.omit()
+```
+
+```{r}
+pokemon_habilidades %>%
+  count(Tipo, Habilidad) %>%
+  graph_from_data_frame() %>%
+  ggraph() +
+  geom_edge_link() +
+  geom_node_point()
+```
+
+```{r}
+pokemon_habilidades %>%
+  count(Tipo, Habilidad) %>%
+  group_by(Tipo) %>%
+  mutate(prop = n / sum(n)) %>%
+  filter(prop >= .05) %>%
+  graph_from_data_frame() %>%
+  ggraph() +
+  geom_edge_link(aes(end_cap = circle(radius = 2, unit = "mm"),
+                     color = prop, alpha = prop, edge_width = prop),
+                 arrow = arrow(type = "open", length = unit(1.5, "mm")),
+                 show.legend = FALSE) +
+  scale_edge_color_continuous(low = "red", high = "blue") +
+  scale_edge_width(range = c(.01, 1.3)) +
+  scale_edge_alpha(range = c(.3, 1)) +
+  geom_node_point(size = 4) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  theme_void()
+```
+
