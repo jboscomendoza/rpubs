@@ -9,12 +9,24 @@ output:
     theme: yeti
 ---
 
-Las redes relacionales son una manera de visualizar información muy útil para datos cualitativos y cuantitativos.
+Las redes relacionales son una manera de visualizar información que resulta muy útil para datos cualitativos y cuantitativos. 
 
-Para ello usaremos datos de los juegos de los juegos de Pokemon.
+Como su nombre lo indica, este tipo de redes son utilizadas para mostrar relaciones entre datos, generalente nominales (nombres, categorías, etiquetas). Por ejemplo, la afinidad entre los integrantes de un equipo de trabajo, los principales clientes de diferentes centros de distribución, dependenciencias entre procesos y muchas otras cosas más.
+
+Para esta entrada, usaremos como ejemplo datos de la serie de juegos *Pokemon*.
+
+# Una introducción muy general a Pokemon
+Cada Pokemon tiene un **tipo** que determina sus estadísticas de ataque y defensa así como las habilidades que puede aprender. 
+
+Además, los tipos de Pokemon determinan fortalezas y debilidad en un complejo sistema, similar al juego "Piedra, papel y tijera". 
+
+Por ejemplo, un Pokemon de tipo **agua** es fuerte contra uno de tipo **fuego** estos, a su vez, son fuertes contra los de tipo **planta**, y este último tipo de Pokemon es fuerte contra los de tipo **agua**.
+
+Es decir, hay una relación fortaleza - debilidad entre los tipos de Pokemon. Esta sería fácil de esquematizar si sólo tuvieramos los cuatro tipos arriba listados, pero no es así. Actualmente, existen dieciocho tipos diferentes de pokemon y cada uno puede ser fuerte o debil a más de un tipo. En algunos casos, la fortaleza es recíproca y hay tipos que son fuertes hacía sí mismos.
+
+Lo que haremos es representar estas relaciones complejas de una manera intuitiva de comprender.
 
 # Paquetes necesarios
-
 Utilizaremos los siguientes paquetes para este análisis.
 
 * *tidyverse* - Una familia de paquetes para importar, procesar, visualizar y exportar datos de forma ordenada.
@@ -23,7 +35,7 @@ Utilizaremos los siguientes paquetes para este análisis.
 
 Como siempre, si no cuentas con alguno de estos paquetes puedes usar la función `install.packages()` para instalarlos.
 
-Cargamos los paquetes a nuestro espacio de trabajo con `library()`.
+Cargamos los paquetes a nu  estro espacio de trabajo con `library()`.
 ```{r paquetes, message=FALSE}
 library(tidyverse)
 library(igraph)
