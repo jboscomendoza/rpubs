@@ -58,8 +58,8 @@ download.file(
 
 # Lectura de datos
 Como tenemos un archivo con extensión .csv, usamos la función `read_csv`.
-```{r leer_pokemon, message=FALSE}
-pokemon <- read_csv("pokemon.csv")
+```{r leer_pokemon, message=FALSE, cache=TRUE}
+pokemon <- read_csv(file = "pokemon.csv")
 ```
 
 Veamos nuestro resultado.
@@ -69,24 +69,174 @@ pokemon
 
 # Procesamiento de datos
 Ahora sí, empezamos con lo interesante, procesar los datos.
-```{r poke_fuerza}
+
+¿Por dónde empezamos?
+
+Recordemos que nuestra intención es mostrar las relaciones entre tipos de Pokemon, así nuestro procesamiento debe facilitar esto.
+
+Para construir una red relacional necesitamos una tabla de datos como la siguiente:
+
+Desde | Hacia | Característica1  | Característica2
+----  |----   |----       | ----
+Uno   | Dos   | Fuerza    | Non
+Dos   | Uno   | Debilidad | Par
+Uno   | Tres  | Fuerza    | Non
+Dos   | Tres  | Debilidad | Par
+
+Cada renglón describe una relación y necesitamos al menos dos columnas, una con el origen de la relación (**desde** donde surge) y otra con el destino de ella (**hacia** donde termina). 
+
+Podemos tener múltiples columnas adicionale que describan las **características** de la relación en cada renglón.
+
+Considerando lo anterior, nuestra meta mínima es obtener una tabla como la siguiente.
+
+Tipo (origen) | Tipo (destino) | Relación
+----  |----   |----
+Agua  | Fuego | Fuerza
+Fuego | Agua  | Debilidad
+Planta| Agua  | Fuerza
+Planta| Fuego | Debilidad
+
+Nuestro objeto `pokemon` tiene dos columnas con información de tipo de Pokemon: type1 y type2. Esto es porque los pokemon pueden tener hasta dos tipos.
+
+  Como nos interesan las relaciones entre tipos individuales, los primero que hacemos es filtrar a todos los pokemon que tienen más de un tipo con la funció `filter()`. Reconocemos a estos caso porque tienen un `NA` en la columna type2.
+
+Vamos a guardar nuestros resultados en un data frame llamdo `poke_fuerza`.
+```{r filtro_type2}
+poke_fuerza <- 
+  pokemon %>% 
+  filter(is.na(type2))
+```
+
+La información de fortalezas y debilidades se encuentra en todas las columnas que inician con "against_" expresado como un multiplicador. 
+
+Por ejemplo, si tenemos un pokemon de tipo *fire* (fuego) y vemos la columna "againt_ground" (contra tierra), veremos un valor de **2**. 
+
+Esto nos indica que un pokemon de tipo fuego recibe el doble de daño de un pokemon tipo tierra, es decir, fuego es **debil** contra  tierra este tipo, o expresado de manera inversa, tierra es **fuerte** contra fuego.
+
+Si el valor en la columna es **0.5**, entonces este tipo de pokemon recibe la mitad de daño, es **fuerte** contra él y si el valor es **1**, entonces no hay diferencia, no es ni fuerte ni debil contra ese tipo.
+
+Vamos a quedarnos sólo con estas columnas y la que contiene el tipo de pokemon, usando la función `select()` de *dplyr*. De una vez, cambiamos el nombre de la columna "type1" a "tipo".
+```{r selecciona columnas}
+poke_fuerza <- 
+  poke_fuerza %>% 
+  select(tipo = type1, starts_with("against"))
+```
+
+El formato en el que se encuentran nuestros datos es conocido como un formato "ancho" (*wide*), pues tenemos distintos valores de un mismo atributo (fortaleza - debilidad) en columnas separadas (las columnas "against_".
+
+Necesitamos cambiar este formato a uno alto (*tall*) para generar una tabla apropiada para generar redes relacionales.
+
+Usamos la funcion `gather()` de *tidyr* para esta tarea. Vamos a consolidar todas las columnas "against_" en dos columnas, una llamada "enemigo" que contenga el nombre de las columnas originales y otra llamda "modificador" con los valores numéricos.
+```{r gather_columnas}
 poke_fuerza <-
+  poke_fuerza %>%
+  gather("enemigo", "modificador", against_bug:against_water)
+```
+
+Vemos nuestro resultado.
+```{r poke_fuerza_alto, eval=FALSE}
+poke_fuerza
+```
+
+Quitamos "against_" de los datos en la columna "enemigo usando la función `gsub()` dentro de `mutate()`.
+```{r quitar_against}
+poke_fuerza <- 
+  poke_fuerza %>% 
+  mutate() %>% 
+  mutate(enemigo = gsub("against_", "", enemigo))
+```
+
+Veamos cuáles tipos tenemos en las columnas tipo y enemigo.
+```{r unicos_columnas}
+unique(poke_fuerza$tipo)
+unique(poke_fuerza$enemigo)
+```
+
+Tenemos un tipo con un nombre inconsistente en "enemigo". "fight" no es un nombre válido de tipo de pokemon, debemos reemplazarlo por "fighting" usando `gsub()`
+```{r poke_fuerza_fight}
+poke_fuerza <- 
+poke_fuerza %>% 
+  mutate(enemigo = gsub("fight", "fighting", enemigo))
+```
+
+Ya que los tipos son correctos en las columnas "tipo" y "enemigo", nos quedamos sólo con los renglones únicos, quitando los repetidos con la función `distinct()` de *dplyr*.
+```{r poke_fuerza_distinct}
+poke_fuerza <- 
+  distinct(poke_fuerza)
+```
+
+Por último. Transformamos los valores en la columna modificador en etiquetas, que asignamos a una nueva columna llamada "relacion".
+
+Nos guiamos con las reglas que vimos más arriba, pero debemos considerar la manera en que la relación que describamos será expresada y qué tan clara es.
+
+Retomemos el ejemplo de un pokemon tipo fuego. Si este tiene un valor de modificar de 2 contra un pokemon tipo agua, podríamos representarlo  de la siguiente manera.
+
+`fuego -- debil ->  agua`
+
+No hay ningún problema con esto, comunica la relación que existe entre estos dos elementos. Sin embargo, veamos que pasa si cambiamos el orden de los elementos, convirtiendo agua en el origen de la relación y fuego en el destino, y con ello cambiando la relación de "debil" a "fuerte".
+
+`agua -- fuerte -> fuego`
+
+Es la misma información representada de una manera diferente, probablemente más clara. Después de todo, explicamos el juego de piedra, papel y tijera como pieda le gana a tijera, tijera le gana a papel, y papel le gana a piedra; no al reves: piedra pierde contra papel, papel pierde contra tijera, y tijera pierde contra piedra.
+
+De nuevo, es la misma información, pero la primera manera de presentarla me parece más intuitiva.
+
+Caambiaremos el orden de las columnas, "enemigo" será la columna de origen y "tipo" la de destino, usando la función `select()`. Con esto en mente, entonces las reglas para etiquetar las relaciones serán: Si la columna modificador es menor que uno, entonces asignamos la etiqueta "Debil", si es mayor que uno será "Fuerte". 
+
+Para etiquetar usamos la función `ifelse()` dentro de `mutate()`.
+
+por último, como no nos interesan las relaciones neutrales, utilizamos `filter()` para quitarlas, antes de etiquetar.
+```{r poke_fuerza_valores}
+poke_fuerza <- 
+  poke_fuerza %>% 
+  select(enemigo, tipo, modificador) %>% 
+  filter(modificador != 1) %>%
+  mutate(Relacion = ifelse(modificador < 1, "Fuerte", "Debil"))
+```
+
+Nuestro resultado es el siguiente. 
+```{r poke_fuera_ver_valores}
+poke_fuerza
+```
+
+Para facilitar la legibilidad de las gráficas que generemos más adelante, vamos a cambiar los valores de "tipo" y "enemigo" a mayúsculas y los truncaremos a sus primeros tres carácteres. Hacemos esto con `mutate_at()` de *dplyr*.
+```{r}
+poke_fuerza <-  
+  poke_fuerza %>% 
+  mutate_at(c("enemigo", "tipo"), ~toupper(.) %>% substr(start = 1, stop = 3))
+```
+
+Finalmente, transformamos este data frame en un objeto apropiado para generar redes relacionales, con la función `graph_from_data_frame()` del paquete *igraph*.
+
+Esta función **siempre** toma las primeras dos columnas de un data frame como el origen y destino de las relaciones, por lo que debes verificar que la tabla que uses tenga la estructura correcta.
+```{r poke_fuerza_igraph}
+poke_graph <- 
+    graph_from_data_frame(d = poke_fuerza)
+```
+
+Veamos el resultado y la clase del objeto que hemos creado con `graph_from_data_frame()`.
+```{r class_poke_graph}
+poke_graph
+
+# Clase
+class(poke_graph)
+```
+
+Podemos realizar todo lo anterior en un sólo proceso.
+```{r poke_graph_todo}
+poke_graph <-
   pokemon %>%
   filter(is.na(type2)) %>%
   select(tipo = type1, starts_with("against")) %>%
   gather("enemigo", "modificador", against_bug:against_water) %>%
-  mutate(enemigo = gsub("against_", "", enemigo),
-         enemigo = gsub("fight", "fighting", enemigo)) %>%
+  mutate(enemigo = gsub("against_", "", enemigo)) %>% 
+  mutate(enemigo = gsub("fight", "fighting", enemigo)) %>%
   distinct() %>%
+  select(enemigo, tipo, modificador) %>% 
   filter(modificador != 1) %>%
-  mutate(Relacion = ifelse(modificador < 1, "Debil", "Fuerte")) %>%
-  select(enemigo, tipo, modificador, Relacion) %>%
+  mutate(relacion = ifelse(modificador < 1, "Fuerte", "Debil")) %>%
+  mutate_at(c("enemigo", "tipo"), ~toupper(.) %>% substr(start = 1, stop = 3)) %>%
   graph_from_data_frame()
-```
-
-Veamos la clase del objeto que hemos creado con `graph_from_data_frame()`.
-```{r class_poke_fuerza}
-class(poke_fuerza)
 ```
 
 Ahora que tenemos un objeto de clase *igraph* que podemos crear visualizaciones de redes relacionales. Para ello, tenemos dos métodos:
@@ -94,58 +244,94 @@ Ahora que tenemos un objeto de clase *igraph* que podemos crear visualizaciones 
 * La función *plot()*
 * El paquete *ggraph*
 
+Revisemos ámbos métodos.
+
 # Generación de redes relacionales usando *plot()*
 Para crear la visualización de una red relacional con *plot()*, debemos cargar primero el paquete *igraph*, de este modos se anexan nuevos métodos a esta función. 
 
 Hecho esto, basta con usar nuestro objeto *igraph* como argumento para `plot()`.
 ```{r plot_simple}
-plot(poke_fuerza)
+plot(poke_graph)
 ```
 
 Obtenemos una visualización bastante aceptable considerando el mínimo esfuerzo invertido en crearla. Tenemos una buena representación de las uniones y nodos de nuestra red, así como de la direccionalidad de las uniones.
 
-Podemos ajustar la manera
+Podemos ajustar la apariencia de una gráfica generada con este método usando distintos parámetros. Los parámetros que modifican las uniones entre nodos inican con la palabra "edge" y las que afectan a los nodos, con la palabra "vertex".
 
+Por ejemplo, cambiamos el color de las uniones con los argumentos `edge.color` y el tamaño de la cabeza de flecha en ellas con `edge.arrow.size`. Modificamos el color de los nodos con `vertex.color`, el texto en ellos con `vertex.label.color` y su tamaño con `vertex.size`.
 ```{r plot_argumentos}
-poke_fuerza%>%
-  plot(layout = layout_with_graphopt, edge.arrow.size = 0.15)
+plot(poke_graph, edge.color = "#3366ff", edge.arrow.size = 0.25, 
+     vertex.color = "white", vertex.label.color = "black",
+     vertex.size = 25)
 ```
 
+Podemos cambiar la manera en que están distribuidos los nodos usando como argumento `layout` una de las funciones de*igraph* específica para esta tarea. 
 
-Es posible lograr un control más fino de la visualización obtenida. Por ejemplo, podemos obtener una red circular con esferas en los nodos.
-```{r}
-plot(poke_fuerza, layout = layout.circle(poke_fuerza),
-     edge.arrow.size = .1,
-     vertex.size = 28, vertex.color = "#ffffff",
-     edge.color = "#333300", vertex.label.color = "black",
-     vertex.shape = "sphere")
+Por ejemplo, para graficar con una distribución en forma de círculo usamos la función `layout.circle()`.
+```{r plot_circular}
+plot(poke_graph, layout = layout.circle(poke_graph))
 ```
+
+También contamos con una distribución con forma de cuadrícula.
+```{r plot_grid}
+plot(poke_graph, layout = layout.grid(poke_graph))
+```
+
+Podemos usar la información de nuestro objeto para colorear nodos y uniones, usando las funciones `V()` y `E()` de *igrah*. Aunque esto nos da un control muy fino sobre cómo presentar nuestras gráficas es también un proceso bastante complicado. 
+
+Una manera más sencilla de generar estas gráficas, con el mismo nivel de detalle, es usar *ggraph*.
 
 # Generación de redes relacionales con *ggraph*
 Todas las redes relacionales generadas con *ggraph* necesitan de especificaciones las uniones (edges) y los nodos (nodes). Es indispensable contar con al menos una de estas especificaciones para generar una red, pero no es absolutamente necesario contar con ambas.
 
-Por ejemplo, así luce una visualización usando únicamente uniones.
+La "gramática" que usamos es la misma que para *ggplot2*, por lo que si conoces cómo usar este paquete, *ggraph* es sencillo de comprender.
+
+Primero, usamos la función `ggraph()` dándole como argumento un objeto de tipo igraph. Con esto generamos lo que conceptualente sería el lienzo de nuestra gráfica.
+
+A esta gráfica agregamos funciones de tipo *geoms* usando el operado `+`. 
+
+Estas funciones agregam diferentes elementos gráficos, que a su vez tienen parámetros que podemos controlar.
+
+Para el caso de redes relacionales, usamos dos "familias" de *geoms*:
+
+* **geom_node_** : Para los nodos. Por ejemplo, `geom_node_point()`, `geom_node_label()`, `geom_node_text()`.
+* **geom_edge_** : Para las uniones. Por ejemplo, `geom_edge_link()`,  `geom_edge_arc()`, `geom_edge_density`.
+
+Además, es posible agregar otras funciones heredadas de *ggplot2* para ajustar el aspecto.
+
+Por ejemplo, así luce una visualización usando únicamente nodos, con la función `geom_node_point()` para crear nodos con forma de punto. 
 ```{r ggraph_solo_edge}
-poke_fuerza%>%
+poke_graph %>%
   ggraph() +
-  geom_edge_link() +
+  geom_node_point() +
   theme_graph()
 ```
 
-Ahora veamos qué pasa si generamos una visualización sólo con nodos.
+Ahora veamos qué pasa si generamos una visualización sólo con uniones, usando la función `geom_edge_link()` para crear uniones de línea recta.
 ```{r ggraph_solo_nodo}
-poke_fuerza%>%
+poke_graph%>%
   ggraph() +
+  geom_edge_link() +
+  theme_graph()
+```
+
+Dependiendo de las relaciones que quieras visualizar, alguna de las dos opciones anteriores puede ser suficiente. Sin embargo, lo más usual es utilizar tanto nodos como uniones. 
+
+Una visualización con estas características se verá como una combinación de las dos anteriores.
+```{r ggraph_simple}
+poke_graph%>%
+  ggraph() +
+  geom_edge_link() +
   geom_node_point() +
   theme_graph()
 ```
 
-Por supuesto, una visualización que incluya uniones y nodos se vería como la combinación de las dos visualizaciones anteriores.
-```{r ggraph_simple}
-poke_fuerza%>%
+Usaremos `geom_node_label()` para mostrar etiquetas en los nodos. Para que funcione correctamente, debemos dar `aes(label = name)`como argumentos a esta función.
+```{r ggraph_simple_label}
+poke_graph%>%
   ggraph() +
   geom_edge_link() +
-  geom_node_point() +
+  geom_node_label(aes(label = name)) +
   theme_graph()
 ```
 
@@ -154,19 +340,19 @@ Habrás notado que aparece el siguiente mensaje al generar las redes anteriores:
 Al crear una red podemos elegir entre diferentes formas para distribuir nuestra red o "*layouts*". *nicely* es un *layout* que intenta distribuir de manera uniforme los nodos y uniones de nuestras redes, pero tenemos más opciones.
 
 El *layout* *linear* ordena todos los nodos en una línea recta.
-```{r pokemon_linear}
-poke_fuerza%>%
+```{r pokemon_linear, fig.height=2}
+poke_graph %>%
   ggraph(layout = "linear") +
   geom_edge_link() +
   geom_node_label(aes(label = name)) +
   theme_graph()
 ```
 
-El resultado es una gráfica poco informativa, pues no son visibles las uniones entre nodos. 
+El resultado es una gráfica poco informativa, pues las uniones entre nodos no son visibles. 
 
 Para solucionar este problema, cambiamos `geom_edge_link()` por `geom_edge_arc()`. De esta manera, reemplazamos uniones con líneas rectas por uniones en forma de arco.
 ```{r pokemon_linear_arc}
-poke_fuerza%>%
+poke_graph%>%
   ggraph(layout = "linear") +
   geom_edge_arc() +
   geom_node_label(aes(label = name)) +
@@ -176,8 +362,8 @@ poke_fuerza%>%
 Esta es una visualización que resulta útil cuando tenemos muchas relaciones de recoprocidad, difíciles de colocar de manera uniforme en un plano.
 
 Otro *layout* es *circle*, que coloca a todos los nodos formando un círculo.
-```{r}
-poke_fuerza %>%
+```{r poke_graph_circle, fig.height=6}
+poke_graph %>%
   ggraph(layout = "circle") +
   geom_edge_link() +
   geom_node_label(aes(label = name)) +
@@ -185,26 +371,26 @@ poke_fuerza %>%
 ```
 
 # Layout con arcos
-```{r}
-poke_fuerza %>%
+```{r poke_graph_arcos, fig.height=8.5}
+poke_graph %>%
   ggraph(layout = "linear") +
-  geom_edge_arc(aes(color = Relacion, end_cap = label_rect(node2.name)),
+  geom_edge_arc(aes(color = relacion, end_cap = label_rect(node2.name)),
                 arrow = arrow(type = "closed", length = unit(1.5, "mm"))) +
   geom_node_point() +
   geom_node_label(aes(label = name)) +
-  facet_grid(Relacion~.) +
+  facet_grid(relacion~.) +
   theme_void() +
   theme(legend.position = "none")
 ```
 
 # Layout en circulo
 ```{r}
-poke_fuerza %>%
+poke_graph %>%
   ggraph(layout = "circle") +
-  geom_edge_link(aes(color = Relacion),
+  geom_edge_link(aes(color = relacion),
                  arrow = arrow(type = "closed", length = unit(1.5, "mm"))) +
   geom_node_label(aes(label = name), vjust = 1) +
-  facet_wrap("Relacion") +
+  facet_wrap("relacion") +
   theme_void() +
   theme(legend.position = "none") +
   scale_edge_color_manual(values = c("#ddbbbb", "#00ccbb"))
@@ -212,11 +398,11 @@ poke_fuerza %>%
 
 # Layout normal
 ```{r}
-poke_fuerza %>%
+poke_graph %>%
   ggraph() +
-  geom_edge_loop(aes(color = Relacion)) +
+  geom_edge_loop(aes(color = relacion)) +
   geom_edge_fan(arrow = arrow(type = "closed", length = unit(1.5, "mm")),
-                aes(end_cap = label_rect(node2.name), color = Relacion)) +
+                aes(end_cap = label_rect(node2.name), color = relacion)) +
   geom_node_label(aes(label = name)) +
   theme_void() +
   theme(legend.position = "top") +
@@ -282,7 +468,7 @@ pokemon_habilidades %>%
   scale_edge_color_continuous(low = "red", high = "blue") +
   scale_edge_width(range = c(.01, 1.3)) +
   scale_edge_alpha(range = c(.3, 1)) +
-  geom_node_point(size = 4) +
+  geom_node_point(size = 3) +
   geom_node_text(aes(label = name), repel = TRUE) +
   theme_void()
 ```
