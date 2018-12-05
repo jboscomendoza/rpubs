@@ -277,7 +277,7 @@ También contamos con una distribución con forma de cuadrícula.
 plot(poke_graph, layout = layout.grid(poke_graph))
 ```
 
-Podemos usar la información de nuestro objeto para colorear nodos y uniones, usando las funciones `V()` y `E()` de *igrah*. Aunque esto nos da un control muy fino sobre cómo presentar nuestras gráficas es también un proceso bastante complicado. 
+Podemos usar la información de nuestro objeto para colorear nodos y uniones, usando las funciones `V()` y `E()` de *igraph*. Aunque esto nos da un control muy fino sobre cómo presentar nuestras gráficas es también un proceso bastante complicado. 
 
 Una manera más sencilla de generar estas gráficas, con el mismo nivel de detalle, es usar *ggraph*.
 
@@ -359,13 +359,40 @@ poke_graph%>%
   theme_graph()
 ```
 
-Esta es una visualización que resulta útil cuando tenemos muchas relaciones de recoprocidad, difíciles de colocar de manera uniforme en un plano.
+Esta es una visualización que resulta útil cuando tenemos muchas relaciones de reciprocidad, difíciles de colocar de manera uniforme en un plano.
 
 Otro *layout* es *circle*, que coloca a todos los nodos formando un círculo.
-```{r poke_graph_circle, fig.height=6}
+```{r poke_graph_circle, fig.height=6, fig.width=6}
 poke_graph %>%
   ggraph(layout = "circle") +
   geom_edge_link() +
+  geom_node_label(aes(label = name)) +
+  theme_graph()
+```
+
+# Visualizando la dirección y tipo de relación
+Las visualizaciones que hasta ahora hemos generado son de utilidad, pero no resuelven el problema de mostrar el tipo de relación entre nodos.
+
+A diferencia de las visualizaciones creadas con *igraph*, las gráficas que hemos creado no incluyen las punta de flecha que muestran la direccionalidad de las relaciones.
+
+Para agregarla, usamos la función `arrow()` como el argumento arrow de los `geom_edge_` de nuestra gráfica. Además necesitamos agregar dentro de `aes()` el el argumento `end_cap`, con la función `label_rect()`. De este modo, aseguramos que las puntas de las flechas sean visibles y las etiquetas de los nodos no las cubran.
+```{r pokegraph_con_flechas}
+poke_graph%>%
+  ggraph() +
+  geom_edge_link(arrow = arrow(type = "closed", length = unit(1.5, "mm")),
+                 aes(end_cap = label_rect(node2.name))) +
+  geom_node_label(aes(label = name)) +
+  theme_graph()
+```
+
+Si además queremos ver no sólo la unión, sino algún atributo de esta unión, podemos usar colores, como un `aes()` de *ggraph*.
+
+```{r pokegraph_con_flechas_colores}
+poke_graph%>%
+  ggraph() +
+  geom_edge_link(arrow = arrow(type = "closed", length = unit(1.5, "mm")),
+                 aes(color = relacion,
+                     end_cap = label_rect(node2.name))) +
   geom_node_label(aes(label = name)) +
   theme_graph()
 ```
