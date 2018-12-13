@@ -1,5 +1,5 @@
 ---
-title: "Redes relacionales con R"
+title: "Redes relacionales con R - Tipos de Pokémon"
 output:
   html_document:
     df_print: tibble
@@ -11,20 +11,48 @@ output:
 
 Las redes relacionales son una manera de visualizar información que resulta muy útil para datos cualitativos y cuantitativos. 
 
-Como su nombre lo indica, este tipo de redes son utilizadas para mostrar relaciones entre datos, generalente nominales (nombres, categorías, etiquetas). Por ejemplo, la afinidad entre los integrantes de un equipo de trabajo, los principales clientes de diferentes centros de distribución, dependenciencias entre procesos y muchas otras cosas más.
+Como su nombre lo indica, este tipo de redes son utilizadas para mostrar relaciones entre datos, generalmente nominales (nombres, categorías, etiquetas). Por ejemplo, la afinidad entre los integrantes de un equipo de trabajo, los principales clientes de diferentes centros de distribución, dependencias entre procesos y muchas otras cosas más.
 
-Para esta entrada, usaremos como ejemplo datos de la serie de juegos *Pokemon*.
+Formalmente podríamos decir que este tipo de visualizaciones es un **grafo**, cuyas características son descritas usando como marco de referencia la **teoría de grafos**:
 
-# Una introducción muy general a Pokemon
-Cada Pokemon tiene un **tipo** que determina sus estadísticas de ataque y defensa así como las habilidades que puede aprender. 
+* https://es.wikipedia.org/wiki/Teor%C3%ADa_de_grafos
 
-Además, los tipos de Pokemon determinan fortalezas y debilidad en un complejo sistema, similar al juego "Piedra, papel y tijera". 
+Esta teoría puede resultar un poco compleja, pero para fines prácticos, un grafo es una estructura que describe un conjunto de vértices, nodos o puntos y que están unidos por aristas, arcos o líneas.
 
-Por ejemplo, un Pokemon de tipo **agua** es fuerte contra uno de tipo **fuego** estos, a su vez, son fuertes contra los de tipo **planta**, y este último tipo de Pokemon es fuerte contra los de tipo **agua**.
+Si visualizamos esta estructura, obtendremos algo como lo siguiente:
+```{r ejemplo_simple, echo=FALSE, message=FALSE}
+redecita <- 
+data.frame(a = c("A", "A", "B", "C", "C", "A"), 
+           b = c("B", "C", "C", "D", "E", "E"))
 
-Es decir, hay una relación fortaleza - debilidad entre los tipos de Pokemon. Esta sería fácil de esquematizar si sólo tuvieramos los cuatro tipos arriba listados, pero no es así. Actualmente, existen dieciocho tipos diferentes de pokemon y cada uno puede ser fuerte o debil a más de un tipo. En algunos casos, la fortaleza es recíproca y hay tipos que son fuertes hacía sí mismos.
+library(igraph)
 
-Lo que haremos es representar estas relaciones complejas de una manera intuitiva de comprender.
+plot(igraph::graph_from_data_frame(redecita))
+
+```
+
+Para esta entrada, usaremos como ejemplo datos de la serie de juegos **Pokémon**, así que para empezar, hablaremos de de qué trata este juego y después veremos cómo crear, paso a paso, una red relacional usando los paquetes *ggraph* e *igraph* de R.
+
+# Una introducción muy general a Pokémon
+[Pokémon](https://es.wikipedia.org/wiki/Pok%C3%A9mon) es una franquicia de videojuegos portátiles que tuvo su origen en 1996, en la consola Game Boy de Nintendo. 
+
+Este es un juego de rol (RPG) en el que los jugadores asumen el papel de un entrenador de los titulares pokemon (pocket monsters), criaturas muy diversas con habilidades especiales, cuya meta es capturar y entrenar a estos simpáticos bichos para hacerlos luchar unos contra otros. O hacerlos concursar en certámenes de belleza, utilizarlos como medio de transporte, criarlos como mascotas y muchas cosas más. 
+
+Veinte años de videojuegos han dado mucho material, que ha dado lugar a juguetes, películas, música, ropa, libros y todo lo que sea posible imaginar decorado con los personajes de Pokémon.
+
+Al momento de escribir esto, existen 802 especies diferentes de pokemon y cada una de ellas tiene un **tipo** que determina sus estadísticas de ataque y defensa así como las habilidades que puede aprender.
+
+Por ejemplo, el famosísimo Pikachu es, en realidad, un miembro de toda una especie de pokemon de tipo eléctrico, mientras que Bidoof, un mítico pokemon con características cuasi-divinas, es de tipo normal.
+
+Estos tipos de pokemon determinan fortalezas y debilidades de cada especie con respecto a otra en un complejo sistema, similar al juego "Piedra, papel y tijera". 
+
+Por ejemplo, un pokemon de tipo **agua** es fuerte contra uno de tipo **fuego** estos, a su vez, son fuertes contra los de tipo **planta**, y este último tipo de pokemon es fuerte contra los de tipo **agua**. Más precisamente, son fuertes o débiles ante *ataques* de un tipo particular, pero para no complicarnos, pensemos en términos de especie y tipo.
+
+Lo anterior equivale a decir que hay una relación fortaleza - debilidad entre los tipos de pokemon Esta sería fácil de esquematizar si sólo tuviéramos los cuatro tipos arriba listados, pero no es así. Actualmente, existen dieciocho tipos diferentes de pokemon y cada uno puede ser fuerte o débil a más de un tipo. En algunos casos, la fortaleza es recíproca y hay tipos que son fuertes hacía sí mismos.
+
+Lo que haremos es representar estas relaciones complejas de una manera intuitiva de comprender: Una red relacional.
+
+Y para crearla, preparemos nuestro espacio de trabajo.
 
 # Paquetes necesarios
 Utilizaremos los siguientes paquetes para este análisis.
@@ -35,7 +63,7 @@ Utilizaremos los siguientes paquetes para este análisis.
 
 Como siempre, si no cuentas con alguno de estos paquetes puedes usar la función `install.packages()` para instalarlos.
 
-Cargamos los paquetes a nu  estro espacio de trabajo con `library()`.
+Cargamos los paquetes a nuestro espacio de trabajo con `library()`.
 ```{r paquetes, message=FALSE}
 library(tidyverse)
 library(igraph)
@@ -45,7 +73,7 @@ library(ggraph)
 # Descarga de datos
 Usaremos la copia de un conjunto de datos publicado originalmente en Kaggle. Este conjunto contiene datos de 800 especies de pokemon distintas con varias características para cada uno de ellos.
 
-The Complete Pokemon Dataset:
+The Complete Pokémon Dataset:
 
 * https://www.kaggle.com/rounakbanik/pokemon
 
@@ -72,7 +100,7 @@ Ahora sí, empezamos con lo interesante, procesar los datos.
 
 ¿Por dónde empezamos?
 
-Recordemos que nuestra intención es mostrar las relaciones entre tipos de Pokemon, así nuestro procesamiento debe facilitar esto.
+Recordemos que nuestra intención es mostrar las relaciones entre tipos de pokemon, así nuestro procesamiento debe facilitar esto.
 
 Para construir una red relacional necesitamos una tabla de datos como la siguiente:
 
@@ -85,7 +113,7 @@ Dos   | Tres  | Debilidad | Par
 
 Cada renglón describe una relación y necesitamos al menos dos columnas, una con el origen de la relación (**desde** donde surge) y otra con el destino de ella (**hacia** donde termina). 
 
-Podemos tener múltiples columnas adicionale que describan las **características** de la relación en cada renglón.
+Podemos tener múltiples columnas adicionales que describan las **características** de la relación en cada renglón.
 
 Considerando lo anterior, nuestra meta mínima es obtener una tabla como la siguiente.
 
@@ -96,11 +124,11 @@ Fuego | Agua  | Debilidad
 Planta| Agua  | Fuerza
 Planta| Fuego | Debilidad
 
-Nuestro objeto `pokemon` tiene dos columnas con información de tipo de Pokemon: type1 y type2. Esto es porque los pokemon pueden tener hasta dos tipos.
+Nuestro objeto `pokemon` tiene dos columnas con información de tipo de pokemon: type1 y type2. Esto es porque los pokemon pueden tener hasta dos tipos.
 
-  Como nos interesan las relaciones entre tipos individuales, los primero que hacemos es filtrar a todos los pokemon que tienen más de un tipo con la funció `filter()`. Reconocemos a estos caso porque tienen un `NA` en la columna type2.
+Como nos interesan las relaciones entre tipos individuales, los primero que hacemos es filtrar a todos los pokemon que tienen más de un tipo con la función `filter()`. Reconocemos a estos caso porque tienen un `NA` en la columna type2.
 
-Vamos a guardar nuestros resultados en un data frame llamdo `poke_fuerza`.
+Vamos a guardar nuestros resultados en un data frame llamado `poke_fuerza`.
 ```{r filtro_type2}
 poke_fuerza <- 
   pokemon %>% 
@@ -109,11 +137,11 @@ poke_fuerza <-
 
 La información de fortalezas y debilidades se encuentra en todas las columnas que inician con "against_" expresado como un multiplicador. 
 
-Por ejemplo, si tenemos un pokemon de tipo *fire* (fuego) y vemos la columna "againt_ground" (contra tierra), veremos un valor de **2**. 
+Por ejemplo, si tenemos un pokemon de tipo *fire* (fuego) y vemos la columna "against_ground" (contra tierra), veremos un valor de **2**. 
 
 Esto nos indica que un pokemon de tipo fuego recibe el doble de daño de un pokemon tipo tierra, es decir, fuego es **debil** contra  tierra este tipo, o expresado de manera inversa, tierra es **fuerte** contra fuego.
 
-Si el valor en la columna es **0.5**, entonces este tipo de pokemon recibe la mitad de daño, es **fuerte** contra él y si el valor es **1**, entonces no hay diferencia, no es ni fuerte ni debil contra ese tipo.
+Si el valor en la columna es **0.5**, entonces este tipo de pokemon recibe la mitad de daño, es **fuerte** contra él y si el valor es **1**, entonces no hay diferencia, no es ni fuerte ni débil contra ese tipo.
 
 Vamos a quedarnos sólo con estas columnas y la que contiene el tipo de pokemon, usando la función `select()` de *dplyr*. De una vez, cambiamos el nombre de la columna "type1" a "tipo".
 ```{r selecciona columnas}
@@ -126,7 +154,7 @@ El formato en el que se encuentran nuestros datos es conocido como un formato "a
 
 Necesitamos cambiar este formato a uno alto (*tall*) para generar una tabla apropiada para generar redes relacionales.
 
-Usamos la funcion `gather()` de *tidyr* para esta tarea. Vamos a consolidar todas las columnas "against_" en dos columnas, una llamada "enemigo" que contenga el nombre de las columnas originales y otra llamda "modificador" con los valores numéricos.
+Usamos la función `gather()` de *tidyr* para esta tarea. Vamos a consolidar todas las columnas "against_" en dos columnas, una llamada "enemigo" que contenga el nombre de las columnas originales y otra llamada "modificador" con los valores numéricos.
 ```{r gather_columnas}
 poke_fuerza <-
   poke_fuerza %>%
@@ -165,7 +193,7 @@ poke_fuerza <-
   distinct(poke_fuerza)
 ```
 
-Por último. Transformamos los valores en la columna modificador en etiquetas, que asignamos a una nueva columna llamada "relacion".
+Por último, transformamos los valores en la columna modificador en etiquetas, que asignamos a una nueva columna llamada "relacion".
 
 Nos guiamos con las reglas que vimos más arriba, pero debemos considerar la manera en que la relación que describamos será expresada y qué tan clara es.
 
@@ -173,25 +201,25 @@ Retomemos el ejemplo de un pokemon tipo fuego. Si este tiene un valor de modific
 
 `fuego -- debil ->  agua`
 
-No hay ningún problema con esto, comunica la relación que existe entre estos dos elementos. Sin embargo, veamos que pasa si cambiamos el orden de los elementos, convirtiendo agua en el origen de la relación y fuego en el destino, y con ello cambiando la relación de "debil" a "fuerte".
+No hay ningún problema con esto, comunica la relación que existe entre estos dos elementos. Sin embargo, veamos que pasa si cambiamos el orden de los elementos, convirtiendo agua en el origen de la relación y fuego en el destino, y con ello cambiando la relación de "débil" a "fuerte".
 
 `agua -- fuerte -> fuego`
 
-Es la misma información representada de una manera diferente, probablemente más clara. Después de todo, explicamos el juego de piedra, papel y tijera como pieda le gana a tijera, tijera le gana a papel, y papel le gana a piedra; no al reves: piedra pierde contra papel, papel pierde contra tijera, y tijera pierde contra piedra.
+Es la misma información representada de una manera diferente, probablemente más clara. Después de todo, explicamos el juego de piedra, papel y tijera como piedra le gana a tijera, tijera le gana a papel, y papel le gana a piedra; no al revés: piedra pierde contra papel, papel pierde contra tijera, y tijera pierde contra piedra.
 
 De nuevo, es la misma información, pero la primera manera de presentarla me parece más intuitiva.
 
-Caambiaremos el orden de las columnas, "enemigo" será la columna de origen y "tipo" la de destino, usando la función `select()`. Con esto en mente, entonces las reglas para etiquetar las relaciones serán: Si la columna modificador es menor que uno, entonces asignamos la etiqueta "Debil", si es mayor que uno será "Fuerte". 
+Cambiaremos el orden de las columnas, "enemigo" será la columna de origen y "tipo" la de destino, usando la función `select()`. Con esto en mente, entonces las reglas para etiquetar las relaciones serán: Si la columna modificador es menor que uno, entonces asignamos la etiqueta "Débil", si es mayor que uno será "Fuerte". 
 
 Para etiquetar usamos la función `ifelse()` dentro de `mutate()`.
 
-por último, como no nos interesan las relaciones neutrales, utilizamos `filter()` para quitarlas, antes de etiquetar.
+Por último, como no son de nuestro interés las relaciones neutrales, utilizamos `filter()` para quitarlas, antes de etiquetar.
 ```{r poke_fuerza_valores}
 poke_fuerza <- 
   poke_fuerza %>% 
   select(enemigo, tipo, modificador) %>% 
   filter(modificador != 1) %>%
-  mutate(Relacion = ifelse(modificador < 1, "Fuerte", "Debil"))
+  mutate(Relacion = ifelse(modificador < 1, "Fuerte", "Débil"))
 ```
 
 Nuestro resultado es el siguiente. 
@@ -199,7 +227,7 @@ Nuestro resultado es el siguiente.
 poke_fuerza
 ```
 
-Para facilitar la legibilidad de las gráficas que generemos más adelante, vamos a cambiar los valores de "tipo" y "enemigo" a mayúsculas y los truncaremos a sus primeros tres carácteres. Hacemos esto con `mutate_at()` de *dplyr*.
+Para facilitar la legibilidad de las gráficas que generemos más adelante, vamos a cambiar los valores de "tipo" y "enemigo" a mayúsculas y los truncaremos a sus primeros tres caracteres. Hacemos esto con `mutate_at()` de *dplyr*.
 ```{r}
 poke_fuerza <-  
   poke_fuerza %>% 
@@ -234,8 +262,9 @@ poke_graph <-
   distinct() %>%
   select(enemigo, tipo, modificador) %>% 
   filter(modificador != 1) %>%
-  mutate(relacion = ifelse(modificador < 1, "Fuerte", "Debil")) %>%
-  mutate_at(c("enemigo", "tipo"), ~toupper(.) %>% substr(start = 1, stop = 3)) %>%
+  mutate(relacion = ifelse(modificador < 1, "Fuerte", "Débil")) %>%
+  mutate_at(c("enemigo", "tipo"), ~toupper(.) %>% 
+              substr(start = 1, stop = 3)) %>%
   graph_from_data_frame()
 ```
 
@@ -244,7 +273,7 @@ Ahora que tenemos un objeto de clase *igraph* que podemos crear visualizaciones 
 * La función *plot()*
 * El paquete *ggraph*
 
-Revisemos ámbos métodos.
+Revisemos ambos métodos.
 
 # Generación de redes relacionales usando *plot()*
 Para crear la visualización de una red relacional con *plot()*, debemos cargar primero el paquete *igraph*, de este modos se anexan nuevos métodos a esta función. 
@@ -256,7 +285,7 @@ plot(poke_graph)
 
 Obtenemos una visualización bastante aceptable considerando el mínimo esfuerzo invertido en crearla. Tenemos una buena representación de las uniones y nodos de nuestra red, así como de la direccionalidad de las uniones.
 
-Podemos ajustar la apariencia de una gráfica generada con este método usando distintos parámetros. Los parámetros que modifican las uniones entre nodos inican con la palabra "edge" y las que afectan a los nodos, con la palabra "vertex".
+Podemos ajustar la apariencia de una gráfica generada con este método usando distintos parámetros. Los parámetros que modifican las uniones entre nodos inician con la palabra "edge" y las que afectan a los nodos, con la palabra "vertex".
 
 Por ejemplo, cambiamos el color de las uniones con los argumentos `edge.color` y el tamaño de la cabeza de flecha en ellas con `edge.arrow.size`. Modificamos el color de los nodos con `vertex.color`, el texto en ellos con `vertex.label.color` y su tamaño con `vertex.size`.
 ```{r plot_argumentos}
@@ -286,11 +315,11 @@ Todas las redes relacionales generadas con *ggraph* necesitan de especificacione
 
 La "gramática" que usamos es la misma que para *ggplot2*, por lo que si conoces cómo usar este paquete, *ggraph* es sencillo de comprender.
 
-Primero, usamos la función `ggraph()` dándole como argumento un objeto de tipo igraph. Con esto generamos lo que conceptualente sería el lienzo de nuestra gráfica.
+Primero, usamos la función `ggraph()` dándole como argumento un objeto de tipo igraph. Con esto generamos lo que conceptualmente sería el lienzo de nuestra gráfica.
 
 A esta gráfica agregamos funciones de tipo *geoms* usando el operado `+`. 
 
-Estas funciones agregam diferentes elementos gráficos, que a su vez tienen parámetros que podemos controlar.
+Estas funciones agregan diferentes elementos gráficos, que a su vez tienen parámetros que podemos controlar.
 
 Para el caso de redes relacionales, usamos dos "familias" de *geoms*:
 
@@ -386,7 +415,6 @@ poke_graph%>%
 ```
 
 Si además queremos ver no sólo la unión, sino algún atributo de esta unión, podemos usar colores, como un `aes()` de *ggraph*.
-
 ```{r pokegraph_con_flechas_colores}
 poke_graph%>%
   ggraph() +
@@ -394,68 +422,63 @@ poke_graph%>%
                  aes(color = relacion,
                      end_cap = label_rect(node2.name))) +
   geom_node_label(aes(label = name)) +
-  theme_graph()
+  theme_void()
 ```
 
-# Layout con arcos
-```{r poke_graph_arcos, fig.height=8.5}
-poke_graph %>%
-  ggraph(layout = "linear") +
-  geom_edge_arc(aes(color = relacion, end_cap = label_rect(node2.name)),
-                arrow = arrow(type = "closed", length = unit(1.5, "mm"))) +
-  geom_node_point() +
-  geom_node_label(aes(label = name)) +
-  facet_grid(relacion~.) +
-  theme_void() +
-  theme(legend.position = "none")
-```
+Esta es una visualización mucho más clara. A simple vista es posible reconocer la relación entre los diferentes tipos de pokemon, sin embargo, aún puede mejorar.
 
-# Layout en circulo
-```{r}
-poke_graph %>%
-  ggraph(layout = "circle") +
-  geom_edge_link(aes(color = relacion),
-                 arrow = arrow(type = "closed", length = unit(1.5, "mm"))) +
-  geom_node_label(aes(label = name), vjust = 1) +
-  facet_wrap("relacion") +
-  theme_void() +
-  theme(legend.position = "none") +
-  scale_edge_color_manual(values = c("#ddbbbb", "#00ccbb"))
-```
+Como estamos usando líneas rectas, cuando hay relaciones de reciprocidad, habrá traslape entre ellas, lo cual dificulta la interpretación.
 
-# Layout normal
-```{r}
-poke_graph %>%
+Cambiamos `geom_edge_link()` por `geom_edge_fan()`, con sus mismos argumentos, para obtener líneas curvas de unión entre nodos.
+
+```{r pokegraph_con_flechas_colores_2}
+poke_graph%>%
   ggraph() +
-  geom_edge_loop(aes(color = relacion)) +
   geom_edge_fan(arrow = arrow(type = "closed", length = unit(1.5, "mm")),
-                aes(end_cap = label_rect(node2.name), color = relacion)) +
-  geom_node_label(aes(label = name)) +
-  theme_void() +
-  theme(legend.position = "top") +
-  scale_edge_color_manual(values = c("#ddbbbb", "#00ccbb"))
-```
-
-```{r}
-pokemon %>%
-  count(type1, type2) %>%
-  filter(n > 3) %>%
-  na.omit() %>%
-  graph_from_data_frame() %>%
-  ggraph(layout = "linear", circular = TRUE) +
-  geom_edge_arc(aes(color = n, end_cap = label_rect(node2.name)),
-                 arrow = arrow(length = unit(1.5, "mm"))) +
+                 aes(color = relacion,
+                     end_cap = label_rect(node2.name))) +
   geom_node_label(aes(label = name)) +
   theme_void()
 ```
 
-```{r habilidades}
-pokemon$abilities[pokemon$name == "Starmie"]
+Como lo mencionamos anteriormente, hay tipos de pokemon que son fuertes o débiles hacia sí mismos. Para que estas relaciones sean visibles, usamos `geom_edge_loop()`. Al igual que con los demás `geom_edge_`, especificamos `aes(color = relacion)` para distinguir el tipo de relación.
+
+Aprovechamos para cambiar de posición la leyenda y especificar los colores de las uniones con `theme()` y `scale_edge_color_manual()` para dar los toques finales a nuestra visualización
+```{r pokegraph_final}
+poke_graph %>%
+  ggraph() +
+  geom_edge_loop(aes(color = relacion)) +
+  geom_edge_fan(arrow = arrow(type = "closed", length = unit(1.5, "mm")),
+                aes(color = relacion, 
+                    end_cap = label_rect(node2.name))) +
+  geom_node_label(aes(label = name)) +
+  theme_void() +
+  theme(legend.position = "top") +
+  scale_edge_color_manual(values = c("#ffaa00", "#00aaff"))
 ```
 
-```{r}
-pokemon_habilidades <-
-  pokemon %>%
+¡Excelente! Creo que nos ha quedado bastante bien.
+
+Por último, también podemos usar `facet_wrap()` o `facet_grid()` para crear paneles de visualizaciones. Por ejemplo, una para fortaleza y otra para debilidad
+```{r pokegraph_facet}
+poke_graph %>%
+  ggraph() +
+  geom_edge_loop(aes(color = relacion)) +
+  geom_edge_fan(arrow = arrow(type = "closed", length = unit(1.5, "mm")),
+                aes(color = relacion, 
+                    end_cap = label_rect(node2.name))) +
+  geom_node_label(aes(label = name)) +
+  theme_void() +
+  theme(legend.position = "top") +
+  scale_edge_color_manual(values = c("#ffaa00", "#00aaff")) +
+  facet_wrap("relacion")
+```
+
+Esta no es la única red relacional que podemos generar con nuestros datos, para ilustrar, un ejemplo que muestra qué cuáles son las habilidades más comunes por tipo de pokemon. 
+
+En esta visualización el color no indica el tipo de relación, sino la **intensidad**.
+```{r pokegraph_habilidades}
+pokemon %>%
   select(name, type1, type2, abilities) %>%
   mutate_at("abilities", function(x) {
     gsub("(\\[|\\'|\\]|,)+", "_", x) %>%
@@ -468,21 +491,9 @@ pokemon_habilidades <-
   gather("Orden_H", "Habilidad", a:f) %>%
   gather("Orden_T", "Tipo", type1, type2) %>%
   select(Tipo, Habilidad, name) %>%
-  na.omit()
-```
-
-```{r}
-pokemon_habilidades %>%
-  count(Tipo, Habilidad) %>%
-  graph_from_data_frame() %>%
-  ggraph() +
-  geom_edge_link() +
-  geom_node_point()
-```
-
-```{r}
-pokemon_habilidades %>%
-  count(Tipo, Habilidad) %>%
+  na.omit() %>% 
+  mutate_at(c("Tipo"), ~toupper(.)) %>% 
+    count(Tipo, Habilidad) %>%
   group_by(Tipo) %>%
   mutate(prop = n / sum(n)) %>%
   filter(prop >= .05) %>%
@@ -492,11 +503,34 @@ pokemon_habilidades %>%
                      color = prop, alpha = prop, edge_width = prop),
                  arrow = arrow(type = "open", length = unit(1.5, "mm")),
                  show.legend = FALSE) +
-  scale_edge_color_continuous(low = "red", high = "blue") +
+  scale_edge_color_continuous(low = "#666666", high = "#00ccaa") +
   scale_edge_width(range = c(.01, 1.3)) +
-  scale_edge_alpha(range = c(.3, 1)) +
+  scale_edge_alpha(range = c(.6, 1)) +
   geom_node_point(size = 3) +
   geom_node_text(aes(label = name), repel = TRUE) +
   theme_void()
 ```
 
+# Conclusiones
+En esta entrada revisamos cómo crear redes relacionales y sus visualizaciones con R. Es un proceso muy similar a crear cualquier tipo de gráfico en R y con el paquete *ggraph* podemos usar la misma lógica que con *ggplot2* para trabajar.
+
+Estas redes son muy útiles no sólo para aprender más sobre Pokémon, sino también para tener una idea intuitiva de todo tipo de relaciones, que además es muy atractiva a la vista. 
+
+Por ejemplo, son usados en ciencias sociales para crear **sociogramas**, que representan las dinámicas dentro de un grupo de personas y en minería de texto para generar redes semánticas, [de lo cual ya hemos hablado aquí](https://boscomendoza.com/redes-semanticas-con-r/).
+
+Puedes leer más sobre este relacionales en los siguientes enlaces:
+
+* [Network Visualization with R](http://www.kateto.net/wp-content/uploads/2015/06/Polnet%202015%20Network%20Viz%20Tutorial%20-%20Ognyanova.pdf) 
+* [Introduction to Network Analysis with R](https://www.jessesadler.com/post/network-analysis-with-r/)
+* [Announcing ggraph: A grammar of graphics for relational data](https://www.data-imaginist.com/2017/ggraph-introduction-edges)
+* [ggraph: ggplot for graphs](https://blog.revolutionanalytics.com/2017/02/ggraph-ggplot-for-graphs.html)
+
+***
+
+Consultas, dudas, comentarios y correcciones son bienvenidas:
+
+* jboscomendoza@gmail.com
+
+El código y los datos usados en este documento se encuentran en Github:
+
+* https://github.com/jboscomendoza/rpubs/tree/master/pokemon_red
