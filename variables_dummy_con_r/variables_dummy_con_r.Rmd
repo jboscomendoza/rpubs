@@ -14,15 +14,15 @@ output:
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, comment = "")
 ```
 
-Los datos categóricos o nominales, como su nombre lo indica, son usados para nombrar o categorizar información. Este tipo de dato se caracteríza por no ser ordenado, incluso si se usan números para representarlos.
+Los datos categóricos o nominales, como su nombre lo indica, son usados para nombrar o categorizar información. Este tipo de dato se caracteriza por no ser ordenado, incluso si se usan números para representarlos.
 
-El nombre de las diferentes razas de perros es un dato categórico. Aunque puedes ordenar todos los nombres alfabéticamente, carece de sentido conceptual que "Akita" se encuentre antes que "Beagle" o que "Collie" se encuentre despúes de "Chihuahua". Esto no nos informa ni nos ayuda a entender sobre las características de los perros que pertenecen a estas razas.
+El nombre de las diferentes razas de perros es un dato categórico. Aunque puedes ordenar todos los nombres alfabéticamente, carece de sentido conceptual que "Akita" se encuentre antes que "Beagle" o que "Collie" se encuentre después de "Chihuahua". Esto no nos informa ni nos ayuda a entender sobre las características de los perros que pertenecen a estas razas.
 
 Las funciones de R base y stats, que se incluyen con toda instalación de este lenguaje, están diseñadas para trabajar con datos categóricos usando, principalmente, las características del tipo de dato *factor*, que es particular a R. 
 
-Si desamos realizar una regresión linear con la función `lm()` de *stats*, no tendremos problemas para realizar correctamente sus operaciones. 
+Si deseamos realizar una regresión linear con la función `lm()` de *stats*, no tendremos problemas para realizar correctamente sus operaciones. 
 
-Sin embargo, este no siempre es el caso con funciones incluídas en paquetes de terceros o que importan procedimientos desde otros lenguajes de programación.
+Sin embargo, este no siempre es el caso con funciones incluidas en paquetes de terceros o que importan procedimientos desde otros lenguajes de programación.
 
 En especial, múltiples métodos de *Machine Learning* y *Deep Learning* requieren matrices numéricas como datos de entrada, por lo que es necesario transformar variables de tipo categórico para implementarlos.
 
@@ -31,7 +31,7 @@ La manera más sencilla de transformar estos datos es crear **variables dummy** 
 En este artículo revisaremos cómo crear variables dummy en R, definiendo nuestra propia función y usando el paquete *fastDummies*. Pero primero, demos un vistazo a qué es una variable dummy.
 
 # Las variables dummy
-Crear variables dummy implica transformar datos de un formato "alto", en el que cada columna contiene la infomación de una variable, a datos con un formato "ancho", en los que múltiples columnas contienen la información de las dos variables, codificada de manera binaria, esto es, con 0 y 1.
+Crear variables dummy implica transformar datos de un formato "alto", en el que cada columna contiene la información de una variable, a datos con un formato "ancho", en los que múltiples columnas contienen la información de las dos variables, codificada de manera binaria, esto es, con 0 y 1.
 
 A lo largo de este artículo usaremos como ejemplo un data frame con datos de distintos perros en una veterinaria hipotética. 
 
@@ -59,11 +59,11 @@ set.seed(1986)
 dplyr::select(fastDummies::dummy_columns(perros, c("raza", "vac")), -c(raza, vac))
 ```
 
-En este ejemplo, la manera de interpretar las variables dummie es observando las columnas con el prefijo "raza_" y "vac". 
+En este ejemplo, la manera de interpretar las variables dummy es observando las columnas con el prefijo "raza_" y "vac_". 
 
 Para cada renglón, si una variable dummy con el prefijo "raza_" contiene un 1, esto indica que el perro en ese renglón pertenece a esa raza. Lo mismo hacemos con las columnas con el prefijo "vac_".
 
-De este modo, el primer perro en nuestro datos es un akita, pues tiene un 1 en la columna *raza_akita* y el tipo de vacuna que se le ha aplicado es bet, pues tiene un 1 en *vac_beta*.
+De este modo, el primer perro en nuestro datos es un akita, pues tiene un 1 en la columna *raza_akita* y el tipo de vacuna que se le ha aplicado es beta, pues tiene un 1 en *vac_beta*.
  
 Veamos como llegar a este resultado, paso por paso, definiendo nuestra propia función.
 
@@ -109,7 +109,7 @@ perros
 
 Comenzamos usando la función `mutate` para modificar y crear columnas.
 
-Agregamos el prefijo "raza" y "vac" a los datos de la columnas con esos nombres. Esto nos servira más adelante organizar y distinguir nuestras variables dummy.
+Agregamos el prefijo "raza" y "vac" a los datos de la columnas con esos nombres. Esto nos servirá más adelante organizar y distinguir nuestras variables dummy.
 
 A lo largo de este ejemplo usaremos el pipe de *dplyr*, `%>%`, el cual indica que el resultado de una función es usado como los argumentos de la siguiente. Esto facilita programar y depurar operaciones que ocurren en secuencia, así que veras frecuentemente este operador.
 ```{r}
@@ -192,7 +192,7 @@ Probamos ahora con la columna *vac*.
 columna_dummy(perros, "vac")
 ```
 
-El resultado anterior está bien si queremos tranformar en dummy una variable a la vez,  pero es poco práctica para realizar múltiples transformaciones.
+El resultado anterior está bien si queremos transformar en dummy una variable a la vez,  pero es poco práctica para realizar múltiples transformaciones.
 
 Podemos usar las funciones `lapply` de R base o `map` del paquete *purrr* del *tidyverse* para definir una nueva función que pueda convertir a dummy más de una variable a la vez.
 
@@ -205,10 +205,10 @@ map(c("raza", "vac"), columna_dummy, df = perros)
 
 ¡Luce bien! Sin embargo, nuestro resultado es una lista con dos data frames, en lugar de un data frame.
 
-Usamos `reduce` de *purrr* e `inner_join` de *dplyr* para unir estas dos data frames en una sola, tomando la columna *id* como índice, un proceso similar lo que haríamos en SQL.
+Usamos `reduce` de *purrr* e `inner_join` de *dplyr* para unir estas dos data frames en una sola, tomando las columnas en comun como índice, un proceso similar lo que haríamos en SQL.
 ```{r map_reduce}
 map(c("raza", "vac"), columna_dummy, df = perros) %>% 
-  reduce(inner_join, by = "id")
+  reduce(inner_join)
 ```
 
 Nos resta quitar del data frame resultante las columnas *raza* y *vac* originales. 
@@ -217,12 +217,12 @@ Esto lo haremos al definir la función `crear_variables`, que tomará como argum
 ```{r crear_dummies}
 crear_dummies <- function(df, nombres) {
   map(c("raza", "vac"), columna_dummy, df = perros) %>% 
-    reduce(inner_join, by = "id") %>% 
+    reduce(inner_join) %>% 
     select(-c(nombres))
 }
 ```
 
-Problemos nuestra nueva función.
+Probemos nuestra nueva función.
 ```{r crear_dummies_raza_vac}
 crear_dummies(perros, c("raza", "vac"))
 ```
@@ -280,4 +280,4 @@ Consultas, dudas, comentarios y correcciones son bienvenidas:
 
 El código y los datos usados en este documento se encuentran en Github:
 
-  * https://github.com/jboscomendoza/rpubs/tree/master/pca_superheroes
+  * https://github.com/jboscomendoza/rpubs/tree/master/variables_dummy_con_r
