@@ -1,0 +1,283 @@
+---
+title: "Variables dummy (one-hot encoding) con R"
+author: "Juan Bosco Mendoza Vega"
+date: "20 de abril de 2019"
+output:
+  html_document: 
+    highlight: haddock
+    theme: yeti
+  pdf_document: 
+    highlight: razaresso
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, comment = "")
+```
+
+Los datos categóricos o nominales, como su nombre lo indica, son usados para nombrar o categorizar información. Este tipo de dato se caracteríza por no ser ordenado, incluso si se usan números para representarlos.
+
+El nombre de las diferentes razas de perros es un dato categórico. Aunque puedes ordenar todos los nombres alfabéticamente, carece de sentido conceptual que "Akita" se encuentre antes que "Beagle" o que "Collie" se encuentre despúes de "Chihuahua". Esto no nos informa ni nos ayuda a entender sobre las características de los perros que pertenecen a estas razas.
+
+Las funciones de R base y stats, que se incluyen con toda instalación de este lenguaje, están diseñadas para trabajar con datos categóricos usando, principalmente, las características del tipo de dato *factor*, que es particular a R. 
+
+Si desamos realizar una regresión linear con la función `lm()` de *stats*, no tendremos problemas para realizar correctamente sus operaciones. 
+
+Sin embargo, este no siempre es el caso con funciones incluídas en paquetes de terceros o que importan procedimientos desde otros lenguajes de programación.
+
+En especial, múltiples métodos de *Machine Learning* y *Deep Learning* requieren matrices numéricas como datos de entrada, por lo que es necesario transformar variables de tipo categórico para implementarlos.
+
+La manera más sencilla de transformar estos datos es crear **variables dummy** (falsas, en español), proceso también conocido como **one-hot encoding**.
+
+En este artículo revisaremos cómo crear variables dummy en R, definiendo nuestra propia función y usando el paquete *fastDummies*. Pero primero, demos un vistazo a qué es una variable dummy.
+
+# Las variables dummy
+Crear variables dummy implica transformar datos de un formato "alto", en el que cada columna contiene la infomación de una variable, a datos con un formato "ancho", en los que múltiples columnas contienen la información de las dos variables, codificada de manera binaria, esto es, con 0 y 1.
+
+A lo largo de este artículo usaremos como ejemplo un data frame con datos de distintos perros en una veterinaria hipotética. 
+
+Nuestro objetivo será transformar la información de dos variables, *raza*, para la raza a la que pertenecen los perros, y *vac*, para tipo de vacuna que se les ha aplicado, a variables dummy.
+
+Es decir, pasaremos de este data frame:
+```{r, echo=FALSE}
+set.seed(1986)
+perros <- 
+  data.frame(
+    id = 1:15,
+    peso = round(rnorm(n = 15, mean = 2000, sd = 250), 1),
+    alto  = round(rnorm(n = 15, mean = 30, sd = 10), 1), 
+    raza = sample(x = c("akita", "beagle", "collie"), size = 15, 
+                     replace = TRUE),
+    vac = sample(x = c("alfa", "beta"), size = 15, replace = TRUE)
+  )
+
+perros
+```
+
+A este data frame:
+```{r, echo=FALSE}
+set.seed(1986)
+dplyr::select(fastDummies::dummy_columns(perros, c("raza", "vac")), -c(raza, vac))
+```
+
+En este ejemplo, la manera de interpretar las variables dummie es observando las columnas con el prefijo "raza_" y "vac". 
+
+Para cada renglón, si una variable dummy con el prefijo "raza_" contiene un 1, esto indica que el perro en ese renglón pertenece a esa raza. Lo mismo hacemos con las columnas con el prefijo "vac_".
+
+De este modo, el primer perro en nuestro datos es un akita, pues tiene un 1 en la columna *raza_akita* y el tipo de vacuna que se le ha aplicado es bet, pues tiene un 1 en *vac_beta*.
+ 
+Veamos como llegar a este resultado, paso por paso, definiendo nuestra propia función.
+
+# Definiendo una función para crear variables dummy
+Usaremos los siguientes paquetes, que forman parte del *tidyverse*, una familia de paquetes diseñados para realizar operaciones comunes en R de manera más intuitiva y organizada:
+
+* dplyr. Manipulación y transformación de datos en data frames.
+* tidyr. Re-estructurar y limpiar la estructura de data frames.
+* map. Manipulación de listas y programación funcional.
+
+La manera más fácil de agregar estos paquetes en nuestro espacio de trabajo  de R es a través de cargar todo tidyverse con `library`.
+```{r}
+library(tidyverse)
+```
+
+Si no tienes instalado este paquete, usamos la función `install.packages`.
+```{r, eval = FALSE}
+install.packages("tidyverse")
+```
+
+Generamos los datos que usaremos en nuestro ejemplo con `data.frame`.
+
+Poblaremos un data frame con datos de id, peso, alto, raza y vacuna aplicada a 15 perros de una veterinaria hipotética. 
+
+Las funciones `rnorm` y `sample` son usadas para generar datos aleatorios, mientras que `set.seed` es una función que nos permite reproducir sus resultados, de modo tal que obtengas los mismos valores que ves aquí. `round` simplemente redondea datos numéricos.
+```{r}
+set.seed(1986)
+perros <- 
+  data.frame(
+    id = 1:15,
+    peso = round(rnorm(n = 15, mean = 2000, sd = 250), 1),
+    alto  = round(rnorm(n = 15, mean = 30, sd = 10), 1), 
+    raza = sample(x = c("akita", "beagle", "collie"), size = 15, 
+                     replace = TRUE),
+    vac = sample(x = c("alfa", "beta"), size = 15, replace = TRUE)
+  )
+```
+
+Nuestro data frame es el siguiente.
+```{r}
+perros
+```
+
+Comenzamos usando la función `mutate` para modificar y crear columnas.
+
+Agregamos el prefijo "raza" y "vac" a los datos de la columnas con esos nombres. Esto nos servira más adelante organizar y distinguir nuestras variables dummy.
+
+A lo largo de este ejemplo usaremos el pipe de *dplyr*, `%>%`, el cual indica que el resultado de una función es usado como los argumentos de la siguiente. Esto facilita programar y depurar operaciones que ocurren en secuencia, así que veras frecuentemente este operador.
+```{r}
+perros %>% 
+  mutate(raza = paste("raza", raza, sep = "_"))
+```
+
+Ahora creamos una columna llamada *valor_raza*, que llenamos con unos. De este modo indicaremos la presencia de esta variable al convertir la columna *raza* en varias dummy. Hacemos lo mismo con la columna *vac*.
+```{r}
+perros %>% 
+  mutate(raza = paste("raza", raza, sep = "_"),
+         valor_raza = 1,
+         vac = paste("vac", vac, sep = "_"),
+         valor_vac = 1
+         )
+```
+
+Finalmente usamos la función `spread` para convertir las columnas *raza* y *vac* en múltiples columnas. Esta función hace una transposición, convirtiendo datos altos a datos anchos.
+
+`spread` nos pide dos argumentos, ╔`key` y `value`. `key es el nombre de la columna que se usará para nombrar a las nuevas columnas, value es el valor que estas tendrán. 
+```{r}
+perros %>% 
+  mutate(raza = paste("raza", raza, sep = "_"),
+         valor_raza = 1,
+         vac = paste("vac", vac, sep = "_"),
+         valor_vac = 1
+         ) %>% 
+  spread(key = raza, value = valor_raza)
+```
+
+Hacemos los mismo con *vac*.
+```{r}
+perros %>% 
+  mutate(raza = paste("raza", raza, sep = "_"),
+         valor_raza = 1,
+         vac = paste("vac", vac, sep = "_"),
+         valor_vac = 1
+         ) %>% 
+  spread(key = raza, value = valor_raza) %>% 
+  spread(key = vac, value = valor_vac)
+```
+
+Nuestras variables están casi listas. Tenemos que cambiar los NA por 0. Debemos dar un argumento adicional a `spread`, `fill = 0`.
+```{r}
+perros %>% 
+  mutate(raza = paste("raza", raza, sep = "_"),
+         valor_raza = 1,
+         vac = paste("vac", vac, sep = "_"),
+         valor_vac = 1
+         ) %>% 
+  spread(key = raza, value = valor_raza, fill = 0) %>% 
+  spread(key = vac, value = valor_vac, fill = 0)
+```
+
+¡Listo! Tenemos variables dummy para *raza* y para *vac*.
+
+Por supuesto podemos definir una función para realizar esta tarea fácilmente.
+
+Como *tidyverse* tiene una forma no estándar de evaluar los nombres de variables, usaremos `mutate_at` en lugar de `mutate` y las funciones `eval` y `as.symbol`. Estas dos últimas funciones son usadas para interpretar cadenas de texto como nombres de objetos.
+
+La función que vamos a definir recibirá como argumentos un data frame y el nombre de la columna que deseamos convertir a `dummy`, como cadena de texto.
+
+Nombramos a nuestra función  `columna_dummy`. 
+```{r columna_dummy}
+columna_dummy <- function(df, columna) {
+  df %>% 
+  mutate_at(columna, ~paste(columna, eval(as.symbol(columna)), sep = "_")) %>% 
+    mutate(valor = 1) %>% 
+    spread(key = columna, value = valor, fill = 0)
+}
+```
+
+Probemos nuestra función con la columna *raza*.
+```{r columna_dummy_raza}
+columna_dummy(perros, "raza")
+```
+
+Probamos ahora con la columna *vac*.
+```{r columna_dummy_vac}
+columna_dummy(perros, "vac")
+```
+
+El resultado anterior está bien si queremos tranformar en dummy una variable a la vez,  pero es poco práctica para realizar múltiples transformaciones.
+
+Podemos usar las funciones `lapply` de R base o `map` del paquete *purrr* del *tidyverse* para definir una nueva función que pueda convertir a dummy más de una variable a la vez.
+
+Como estamos usando *tidyverse*, usaremos `map`, una función que nos permite aplicar una función a todos los elementos de una lista, o un objeto coercionable a una lista, como es el caso de los data frame.
+
+Vamos a aplicar `columna_dummy` a los elementos de nuestro data frame *perros* llamados *raza* y *vac*.
+```{r map_raza_vac}
+map(c("raza", "vac"), columna_dummy, df = perros) 
+```
+
+¡Luce bien! Sin embargo, nuestro resultado es una lista con dos data frames, en lugar de un data frame.
+
+Usamos `reduce` de *purrr* e `inner_join` de *dplyr* para unir estas dos data frames en una sola, tomando la columna *id* como índice, un proceso similar lo que haríamos en SQL.
+```{r map_reduce}
+map(c("raza", "vac"), columna_dummy, df = perros) %>% 
+  reduce(inner_join, by = "id")
+```
+
+Nos resta quitar del data frame resultante las columnas *raza* y *vac* originales. 
+
+Esto lo haremos al definir la función `crear_variables`, que tomará como argumentos un data frame y los nombres de las variables que deseamos convertir a dummy. De este modo, podremos usar `select` para quitar del data frame resultante las variables originales.
+```{r crear_dummies}
+crear_dummies <- function(df, nombres) {
+  map(c("raza", "vac"), columna_dummy, df = perros) %>% 
+    reduce(inner_join, by = "id") %>% 
+    select(-c(nombres))
+}
+```
+
+Problemos nuestra nueva función.
+```{r crear_dummies_raza_vac}
+crear_dummies(perros, c("raza", "vac"))
+```
+
+¡Hemos terminado! 
+
+Por supuesto, si no quieres definir esta función para cada uno de tus proyectos en R, puedes crear un paquete local que la incluya o puedes usar un paquete ya existente que realice esta transformación. Uno de ellos es *fastDummies*.
+
+# Usando fastDummies
+El paquete fastDummies esta diseñado específicamente para convertir variables categóricas en dummies.
+
+Cargamos este paquete con `library`.
+```{r lib_fastDummies}
+library(fastDummies)
+```
+
+Si no lo tenemos instalado, usamos `install.packages`.
+```{r inst_fastDummies, eval=FALSE}
+install.packages("fastDummies")
+```
+
+Podemos crear variables dummy con la función `dummy_cols`. Damos como argumentos un data frame y el nombre de las columnas que queremos convertir a dummy. Si no damos nombres de columna, convertirá todas las que sean de tipo carácter o factor.
+```{r dummy_cols}
+dummy_cols(perros,  select_columns = c("raza", "vac"))
+```
+
+Esta función nos devuelve un data frame que conserva las variables originales, así que tenemos que usar `select` para quitarlas, si así lo deseamos.
+```{r dummy_cols_select}
+dummy_cols(perros,  select_columns = c("raza", "vac")) %>% 
+  select(-c("raza", "vac"))
+```
+
+`dummy_cols` además acepta un par de argumentos más, que son útiles para evitar colinealidad en ciertos modelos estadísticos:
+
+* remove_first_dummy: Quita la primera categoría en las variables convertidas a dummy.
+* remove_most_frequent_dummy: Quita la categoría más numerosa en las variables convertidas a dummy.
+
+Por último, `dummy_rows` es una función que nos sirve para generar renglones para los cuales no existen datos para todas las combinaciones de variables categóricas existentes.
+
+Nosotros no tenemos datos para la combinación raza = "beagle" y vac = "alfa", así que genera un renglón para esta combinación, asignando NA como valor para las demás variables.
+```{r}
+dummy_rows(perros)
+```
+
+# Conclusiones
+En este artículo revisamos dos procedimientos para crear variables dummy en R, proceso al que también se le conoce como *one-hot encoding*. En mi experiencia manipulando datos, esta es una transformación a la cual no puedes escapar si quieres trabajar algoritmos de Machine Learning y Deep Learning. 
+
+En el mundo real, los datos nunca tienen el formato ideal para ser analizados, así que contar con las herramientas para poder manipularlos a formatos que cubran nuestras necesidades es sumamente importante y algo en lo que vale la pena invertir un poco de tiempo.
+
+---
+
+Consultas, dudas, comentarios y correcciones son bienvenidas:
+
+  * jboscomendoza@gmail.com
+
+El código y los datos usados en este documento se encuentran en Github:
+
+  * https://github.com/jboscomendoza/rpubs/tree/master/pca_superheroes
