@@ -3,17 +3,25 @@ library(ineeR)
 
 planea <- read_rds("planea.rds")
 
-media_pv(x = planea$lyc, variable = "LYC", 
-         w_final = "W_FSTUWT", w_rep = "W_FSTR")
+df_variables <- 
+  expand.grid(
+    variable = c("LYC", "PM"), 
+    grupo = c("NACIONAL", "SERV", "RURALIDAD", "SEXO", "EDAD_AC"), 
+    stringsAsFactors = FALSE
+  )
 
-media_pv(x = planea$lyc, variable = "LYC", 
-         w_final = "W_FSTUWT", w_rep = "W_FSTR", grupo = "SERV")
+resultados <- 
+  pmap(df_variables, 
+       function(variable, grupo) {
+         media_pv(x = planea[[variable]], variable = variable, 
+                  w_final = "W_FSTUWT", w_rep = "W_FSTR", grupo = grupo)
+       })
 
-media_pv(x = planea$lyc, variable = "LYC", 
-         w_final = "W_FSTUWT", w_rep = "W_FSTR", grupo = "RURALIDAD")
+names(resultados) <- 
+  pmap(df_variables, 
+       function(variable, grupo) {
+         paste(variable, grupo, sep = "_")
+       }) %>% 
+  reduce(c)
 
-media_pv(x = planea$lyc, variable = "LYC", 
-         w_final = "W_FSTUWT", w_rep = "W_FSTR", grupo = "SEXO")
-
-media_pv(x = planea$lyc, variable = "LYC", 
-         w_final = "W_FSTUWT", w_rep = "W_FSTR", grupo = "EDAD_AC")
+resultados
