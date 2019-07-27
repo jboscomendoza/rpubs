@@ -22,3 +22,5 @@ names(planea) <- c("lyc", "mat", "directores", "docentes", "padres")
 
 nombre_vars <- map(archivos, leer_nombre_vars)
 names(nombre_vars) <- c("directores", "docentes", "padres")
+
+write_rds(planea, "planea.rds")
