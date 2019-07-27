@@ -17,8 +17,8 @@ leer_nombre_vars <- function(ruta) {
 
 archivos <- list.files(pattern = "\\.sav")
 
-df_cuest <- map(archivos, leer_datos)
-names(df_cuest) <- c("directores", "docentes", "padres")
+planea <- map(archivos, leer_datos)
+names(planea) <- c("lyc", "mat", "directores", "docentes", "padres")
 
 nombre_vars <- map(archivos, leer_nombre_vars)
 names(nombre_vars) <- c("directores", "docentes", "padres")
