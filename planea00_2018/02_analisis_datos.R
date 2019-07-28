@@ -3,10 +3,13 @@ library(ineeR)
 
 planea <- read_rds("planea.rds")
 
+variable_nombres <- c("LYC", "PM") 
+grupo_nombres <- c("NACIONAL", "SERV", "RURALIDAD", "SEXO", "EDAD_AC")
+  
 df_variables <- 
   expand.grid(
-    variable = c("LYC", "PM"), 
-    grupo = c("NACIONAL", "SERV", "RURALIDAD", "SEXO", "EDAD_AC"), 
+    variable = variable_nombres, 
+    grupo = grupo_nombres, 
     stringsAsFactors = FALSE
   )
 
@@ -17,11 +20,20 @@ resultados <-
                   w_final = "W_FSTUWT", w_rep = "W_FSTR", grupo = grupo)
        })
 
-names(resultados) <- 
-  pmap(df_variables, 
-       function(variable, grupo) {
-         paste(variable, grupo, sep = "_")
-       }) %>% 
-  reduce(c)
+resultados <- 
+  map(resultados, 
+    ~filter(., !Grupo %in% c("No identificada", "Respuesta múltiple", 
+                             "Respuesta omitida")))
 
-resultados
+resultados <- 
+seq_along(resultados) %>% 
+  matrix(nrow = 2) %>% 
+  data.frame() %>% 
+  map(function(x) {
+    bind_rows(
+      pluck(resultados, x[[1]]),
+      pluck(resultados, x[[2]])
+    )
+  })
+
+names(resultados) <- variable_nom
