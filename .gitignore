@@ -5,3 +5,12 @@
 ecea_diversidad/ecea_diversidad.Rproj
 *.html
 *.dcf
+.Rproj.user
+
+*.Rproj
+
+*.sps
+
+*.rds
+
+planea00_2018/plots/
