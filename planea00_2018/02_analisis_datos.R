@@ -8,7 +8,8 @@ planea <- read_rds("planea.rds")
 variable_nombres <- c("LYC", "PM") 
 grupo_nombres <- c("NACIONAL", "SERV", "RURALIDAD", "SEXO", "EDAD_AC")
 no_validos <- c("No identificada", "Respuesta múltiple", "Respuesta omitida")
-  
+
+# Puntajes
 df_variables <- 
   expand.grid(
     variable = variable_nombres, 
@@ -45,3 +46,36 @@ map(grupo_nombres, function(x) {
   print(graf_resultados[[x]])
   dev.off()
 })
+
+# Niveles de logro
+variables_prop <- c("LYCNVL1", "PMNVL1")
+
+df_variables_prop <- 
+  expand.grid(
+    variable = variables_prop,
+    grupo = grupo_nombres, 
+    stringsAsFactors = FALSE
+  )
+
+proporcion <- 
+  pmap(df_variables_prop, 
+       function(variable, grupo) {
+         tabla <- str_remove(variable, "NVL1")
+         prop_pob(x = planea[[tabla]], variable = variable, 
+                  w_final = "W_FSTUWT", w_rep = "W_FSTR", grupo = grupo)
+       }) %>% 
+  map(~filter(., !Grupo %in% no_validos))
+
+proporcion <- 
+  seq_along(proporcion) %>% 
+  matrix(nrow = 2) %>% 
+  data.frame() %>% 
+  map(function(x) {
+    bind_rows(
+      pluck(proporcion, x[[1]]),
+      pluck(proporcion, x[[2]])
+    )
+  }) %>% 
+  map(separate, col = "Grupo", into = c("Grupo", "Nivel"), sep = "\\.")
+
+names(proporcion) <- grupo_nombres
