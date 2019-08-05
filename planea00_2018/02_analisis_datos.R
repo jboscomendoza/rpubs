@@ -97,3 +97,18 @@ proporcion <-
   map(separate, col = "Grupo", into = c("Grupo", "Nivel"), sep = "\\.")
 
 names(proporcion) <- grupo_nombres
+
+proporcion$EDAD_AC %>% 
+  mutate(
+    Variable = str_remove_all(Variable, "NVL1")) %>% 
+  ggplot() +
+  aes(Grupo, Porcentaje, fill = Nivel, color = Nivel) +
+  geom_col() + 
+  scale_y_continuous(expand = c(0, 0)) +
+  facet_grid(Variable~.) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_blank()
+  )
