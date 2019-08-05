@@ -38,7 +38,22 @@ seq_along(resultados) %>%
 
 names(resultados) <- grupo_nombres
 
-graf_resultados <- map(resultados, graf_media)
+plot_resultados <- function(tabla) {
+  tabla %>% 
+    ggplot() +
+    aes(Grupo, Media, color = Grupo) +
+    geom_point() +
+    geom_text(aes(label = round(Media, 1)), 
+              position = position_nudge(x = .3)) + 
+    geom_errorbar(aes(ymin = Lim_inf, ymax = Lim_sup), width = .25) +
+    scale_y_continuous(limits = c(300, 650)) +
+    facet_wrap("Variable") +
+    theme_bw() +
+    theme(legend.position = "none",
+          panel.grid.minor.y = element_blank())
+}
+
+graf_resultados <- map(resultados, plot_resultados)
 
 map(grupo_nombres, function(x) {
   nombre <- paste0("plots/", x, ".png")
@@ -46,6 +61,9 @@ map(grupo_nombres, function(x) {
   print(graf_resultados[[x]])
   dev.off()
 })
+
+
+
 
 # Niveles de logro
 variables_prop <- c("LYCNVL1", "PMNVL1")
@@ -79,3 +97,18 @@ proporcion <-
   map(separate, col = "Grupo", into = c("Grupo", "Nivel"), sep = "\\.")
 
 names(proporcion) <- grupo_nombres
+
+proporcion$EDAD_AC %>% 
+  mutate(
+    Variable = str_remove_all(Variable, "NVL1")) %>% 
+  ggplot() +
+  aes(Grupo, Porcentaje, fill = Nivel, color = Nivel) +
+  geom_col() + 
+  scale_y_continuous(expand = c(0, 0)) +
+  facet_grid(Variable~.) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_blank()
+  )
