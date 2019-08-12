@@ -2,17 +2,22 @@ library(tidyverse)
 library(ineeR)
 
 dir.create("plots")
+dir.create("output")
 
-planea <- read_rds("planea.rds")
+planea <- 
+  read_rds("planea.rds") %>% 
+  map(~mutate_at(., "NACIONAL", ~"Nacional"))
 
-variable_nombres <- c("LYC", "PM") 
+nombre_vars <- read_rds("nombre_vars.rds")
+
+asignaturas <- c("LYC", "PM") 
 grupo_nombres <- c("NACIONAL", "SERV", "RURALIDAD", "SEXO", "EDAD_AC")
 no_validos <- c("No identificada", "Respuesta múltiple", "Respuesta omitida")
 
 # Puntajes
 df_variables <- 
   expand.grid(
-    variable = variable_nombres, 
+    variable = asignaturas, 
     grupo = grupo_nombres, 
     stringsAsFactors = FALSE
   )
@@ -63,6 +68,8 @@ map(grupo_nombres, function(x) {
 })
 
 
+write_rds(resultados, "output/resultados.rds")
+write_rds(graf_resultados, "output/graf_resultados.rds")
 
 
 # Niveles de logro
@@ -97,18 +104,19 @@ proporcion <-
   map(separate, col = "Grupo", into = c("Grupo", "Nivel"), sep = "\\.")
 
 names(proporcion) <- grupo_nombres
-
-proporcion$EDAD_AC %>% 
+##
+proporcion$NACIONAL %>% 
   mutate(
     Variable = str_remove_all(Variable, "NVL1")) %>% 
   ggplot() +
   aes(Grupo, Porcentaje, fill = Nivel, color = Nivel) +
-  geom_col() + 
+  geom_col(color = "#333333") + 
   scale_y_continuous(expand = c(0, 0)) +
-  facet_grid(Variable~.) +
+  facet_wrap("Variable") +
   theme_bw() +
   theme(
     legend.position = "top",
     panel.grid.major.y = element_blank(),
     panel.grid.major.x = element_blank()
   )
+

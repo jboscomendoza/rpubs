@@ -1,0 +1,165 @@
+---
+title: "Resultados Planea Preescolar - 2018"
+author: "Juan Bosco Mendoza Vega"
+date: "11 de agosto de 2019"
+output: 
+  html_document: 
+    theme: yeti
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 7, fig.height = 6, fig.align = "center")
+library(tidyverse)
+library(flextable)
+
+graf_resultados <- read_rds("output/graf_resultados.rds")
+resultados <- read_rds("output/resultados.rds")
+```
+
+# Introducción
+En este artículo mostraré los resultados del *Plan Nacional para la Evaluación de los Aprendizajes (Planea)* aplicada por el *Instituto Nacional para la Evaluación de la Educación (INEE)* de México a estudiantes de preescolar al final del ciclo escolar 2017-2018.
+
+Como consecuencia de una reforma constitucional, en Mayo de 2019 se decretó la disolución del INEE. Esto  tuvo como consecuencia que, al momento de escribir esto, la publicación de resultados de evaluación fue interrumpida y no es claro si será retomada. Los informes con los resultados de varias evaluaciones a cargo del INEE no se han publicado, incluidos los de Planea Preescolar del 2018. 
+
+Mi intención con este artículo es ayudar a difundirlos, aprovechando que el INEE hizo públicas todas las bases de datos de sus evaluaciones.
+
+Las bases de datos del INEE pueden encontrarse en el siguiente enlace:
+
+* https://www.inee.edu.mx/evaluaciones/bases-de-datos/ 
+
+Y la base de datos de Planea Preescolar del 2018 se encuentra en este enlace:
+
+* https://www.inee.edu.mx/evaluaciones/planea/base-de-datos-planea-aplicacion-a-tercer-grado-de-preescolar-del-ciclo-escolar-2017-2018/ 
+
+Todo el código usado en este artículo, incluido el markdown para generarlo, se encuentra en el siguiente repositorio de GitHub. Este código permite replicar lo aquí publicado:
+
+* https://github.com/jboscomendoza/rpubs/tree/master/planea00_2018
+
+En este artículo encontrarás una buena cantidad de siglas y explicaciones de diferentes aspectos técnicos relacionados con esta evaluación, con el propósito que lo aquí presentado sea lo más claro posible.
+
+También es importante que sepas que tengo familiaridad con muchos de los aspectos técnicos porque trabajé en el INEE de octubre de 2014 a febrero de 2019 en la Unidad de Evaluación del Sistema Educativo Nacional. Fue para facilitar mi trabajo allí que escribí el paquete de R usado para realizar las estimaciones que verás más adelante.
+
+Los resultados que encontrarás a continuación son los nacionales, por tipo de servicio de las escuelas, por ruralidad de las localidades en las que se encuentran las escuelas, por sexo y por edad de los estudiante.
+
+# Sobre Planea
+Planea fue un programa de evaluación a gran escala a cargo del INEE que tenía como misión principal dar cuenta del aprendizaje de los estudiantes mexicanos en educación básica y media superior, a nivel de sistema educativo. Constaba de evaluaciones realizadas a estudiantes del último año de preescolar, primaria, secundaria y bachillerato.
+
+La aplicación de Planea Preescolar del 2018 fue hecha a una muestra representativa de poco más de 2200 estudiantes de preescolar de todo el país, en la que se evaluó su aprendizaje en los campos formativos de **Lenguaje y comunicación(LYC)** y **Pensamiento matemático (PM)**. Además, se recogió información del contexto de los estudiantes a través de cuestionarios para sus padres, maestros y directores.
+
+# Resultados nacionales
+El puntaje promedio de LYC y PM es de 500 puntos.
+
+```{r resultados}
+graf_resultados$NACIONAL
+
+flextable(resultados$NACIONAL)
+```
+
+Los puntajes se muestran acompañados con sus intervalos de confianza, que en la gráfica están representados con una linea vertical 
+
+Dado que los resultados son estimados a partir de una muestra, hay cierto grado de incertidumbre asociado a ellos que es expresado como el **Error Estándar (EE)** de la medida, que encontrarás en la tabla. Allí tembián te encontrarás el valor de los límites inferior y superior del intervalo de confianza al 95%.
+
+Para fines prácticos, lo relevante al observar los intervalos de confianza de dos estimadores es su traslape. **Si no traslapan, son diferentes estadísticamente**.
+
+En nuestro caso, ambas media son estadisticamente iguales.
+
+# ¿Qué significan estos puntajes?
+Por sí mismos, los puntajes promedio no son particularmente informativos, en particular estos que corresponden a toda la población evaluada.
+
+La práctica común en las evaluaciones de INEE era centrar la media de los puntajes en 500 puntos, con una
+desviación de estándar de 100. Así que la media nacional siempre será de 500 puntos, excepto al comparar resultados de diferentes años
+
+Puede decirse que esta es una práctica heredada del Programa Internacional de Evaluaciones de los Alumnos (PISA) de la Organización para la Cooperación y el Desarrollo Económico (OCDE/OECD), que ha sido adoptada en diferentes evaluaciones internacionales.
+
+Los puntajes de los estudiantes, que se obtienen a partir de un modelo de medición de Teoría de Respuesta al Ítem (TRI/IRT) y estos se expresan originalmente en logits, que tienen un rango teórico de $-\infty$ a $+\infty$, con media igual a 0.
+
+Estos puntajes, mediante una transformación lineal  son ajustados a una media igual a 500 y desviación estándar igual a 100. Esto se hace para simplificar la comunicación de los resultados, al convertirlos a una escala un poco más familiar para un lector ordinario. 
+
+Puedes conceptualizar la transformación anterior como análoga a la estandarización a puntajes $z$, pues es esencialmente el mismo procedimiento. Transformar de este modo es posible porque los puntajes de los estudiantes tienden a una distribución normal, así que **ese 500 es el desempeño de un estudiante mexicano promedio**.
+
+Los puntajes son más interesantes cuando los desagregamos por grupos.
+
+# Resultados por tipo de servicio
+Esta aplicación de Planea se realizó a estudiantes de preescolares de tres diferentes tipo de servicio:
+
+* Públicos.
+* Comunitarios (que también son públicos y se encuentran en localidades rurales de poca población).
+* Privados.
+
+El puntaje promedio para cada tipo de servicio fue el siguiente.
+
+```{r servicio}
+graf_resultados$SERV
+flextable(resultados$SERV)
+```
+
+Los preescolares privadas tienen puntajes considerablemente más altos en ambos campos formativos que las escuelas públicas, mientras que los preescolares comunitarios tuvieron los puntajes más bajos en ambos campos formativos. 
+
+La diferencia entre preescolares privados y los demás servicios es grande. Una desviación estándar más que los públicos y casi una desviación estándar y media más que los comunitarios.
+
+Es decir, un estudiante promedio de un preescolar privado tiene aproximadamente 80% de probabilidad de obtener mejores resultados que un estudiante de preescolar público y 90% de probabilidad de mejores resultados que un estudiante de comunitario.
+
+Lo anterior es muy probablemente el resultado de que las familias de estudiantes de preescolares privados suelen tener el nivel socioeconómico más alto de todos y que este tipo de preescolar tiende a estar mejor equipado y encontrarse en localidades urbanas.
+
+# Resultados por ruralidad
+Se tiene información del tipo de localidad, rural o urbana, en el que se encuentran los preescolares públicos.
+
+```{r ruralidad}
+graf_resultados$RURALIDAD
+flextable(resultados$RURALIDAD)
+```
+
+Los preescolares en localidades urbanas tienen un puntaje más alto en LYC que los preescolares en localidades rurales, mientras que no diferencia estadísticamente significativa en PM.
+
+Parece que la ruralidad de la localidad tiene mayor relación con el aprendizaje de LYC que de PM. Una posible explicación es que los estudiantes en localidades urbanas tienen un acceso mayor a recursos de alfabetización, tanto en sus hogares, como en sus comunidades.
+
+# Resultados por sexo
+Los resultados de estudiantes hombres y mujeres fueron los siguientes.
+
+```{r sexo}
+graf_resultados$SEXO
+flextable(resultados$SEXO)
+```
+
+Aunque los resultados de los hombres son ligeramente superiores, esta diferencia no es estadísticamente significativa. Es decir, no hay diferencia entre ellos.
+
+Este es un resultado interesante, pues desde primaria hasta bachillerato, se presentan diferencias consistente en los resultados entre hombres y mujeres en estos campos formativos. Generalmente, las mujeres tienen mejores resultados en lenguaje y comunicación, y los hombres en pensamiento matemático.
+
+Valdría la pena investigar porqué en preescoalr no hay diferencias entre sexos pero sí los hay en los niveles educativos siguientes.
+
+# Resultados por edad
+Finalmente, los resultados por edad, expresada en años cumplidos al momento de la evaluación.
+
+```{r edad}
+graf_resultados$EDAD_AC
+flextable(resultados$EDAD_AC)
+```
+
+Parece que a mayor edad, los estudiantes obtienen mejores resultados, con excepción de los que tienen siete años.
+
+Los estudiantes de cuatro años tienen los resultados más bajos, mientras que los de seis años, que es la edad normativa para concluir preescolar, tienen los más altos. 
+
+Los resultados para estudiantes de 7 años tienen intervalos de confianza muy amplios, lo cual es una consecuencia de tener una muestra pequeña para este grupo de edad. Como los intervalos de confianza de esta media se traslapan con todos los demás, este resultado no es particularmente informativo.
+
+Además, la diferencia en puntajes es más pronunciada en PM que en LYC. Parecer ser  que la edad tiene una mayor relación con el aprendizaje de PM que LYC.
+
+# Conclusiones
+Los resultados presentados aquí son solo una parte de toda la información que se encuentra en la base de datos de Planea Preescolar aplicada en el 2018.
+
+Queda pendiente la estimación de niveles de logro, lo cual ayuda a contextualizar mejor estos puntajes y la relación de los resultados con las variables de contexto. Pero esos serán temas de otros artículos.
+
+Quiero mencionar que el análisis realizado en este artículo es bastante superficial. Los informes de resultados del INEE se caracterizaban por no sólo presentar los resultado de evaluación, sino además presentar interpretaciones de ellos sustentadas en la investigación educativa y comparaciones con otras evaluaciones, nacionales e internacionales.
+
+Creo que la desaparición del INEE ha sido una pérdida considerable para la investigación educativa y por supuesto, que ha afectado a muchas personas que estimo y admiro.
+
+Lo mejor que podemos hacer es utilizar y porpiciar el uso los datos que generó esta institución a lo largo de dieciciete años. Hay una cantidad enorme de información a la que aún podemos sacarle provecho.
+
+---
+
+Consultas, dudas, comentarios y correcciones son bienvenidas:
+
+  * jboscomendoza@gmail.com
+
+El código y los datos usados en este documento se encuentran en Github:
+
+  * https://github.com/jboscomendoza/rpubs/tree/master/planea00_2018
