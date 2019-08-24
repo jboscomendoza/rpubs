@@ -1,0 +1,112 @@
+---
+title: "Introducción a dplyr"
+author: "Juan Bosco Mendoza Vega"
+date: "23/8/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Vamos a ver una introducción breve al paquete dplyr de R.
+
+Este paquete contiene funciones que hacen más intuitiva la manipulación y transformación de datos, entre ellas, muchas utilidades para trabajar con data frame.
+
+Para instalar `dplyr` usamos la función `install.packages()`.
+
+Aunque es posible instalar únicamente `dplyr` con `install.packages("dplyr")`, es recomendable instalar todo el meta paquete `tidyverse`. Esto instalará una familia de paquetes que tiene como objetivo facilitar el uso de R y que sin duda te serán de utilidad en el futuro.
+
+```{r, eval = FALSE}
+install.packages("tidyverse")
+```
+
+Una vez instalado, cargamos este paquete a nuestra área de trabajo.
+
+```{r}
+library(tidyverse)
+```
+
+Lo primero que veremos de `dplyr` es un operador que toma del paquete `magrittr`, el pipe: `%>%`
+
+Este operador se puede leer como "toma como argumento lo que está del lado izquierdo para lo hacer lo que está del lado derecho".
+
+Puede sonar un poco raro, pero este operador ayuda a escribir código fácil de entender y depurar. En lugar de anidar funciones, como es lo habitual en R, las escribes una después de otra, en el orden que desees que se ejecuten.
+
+Veamos esto en acción.
+
+Su quisiera obtener la media de una secuencia de diez números, normalmente hago lo siguiente.
+```{r}
+mean(1:10)
+```
+
+Con el pipe, puedo relizar la misma tarea, expresada de una manera diferente.
+```{r}
+1:10 %>% mean()
+```
+
+Esto parece muy ocioso, porque estamos escribiendo más y no es evidente una ganancia en claridad.
+
+Cuando el pipe es realmente útil es al momento de realizar múltiples operaciones en secuencia.
+
+Por ejemplo, si por alguna razón quisiera correr un análisis de componentes principales a partir de una secuencia de números consecutivos, a los cuales les aplico una normalización y, con esos resultados, obtener un resumen de la importancia de los componentes extraidos, haría lo siguiente.
+```{r}
+summary(princomp(scale(matrix(1:80, ncol = 4))))
+```
+
+No es tan difícil de leer, siempre y cuando busques el nivel más profundo de anidación. Escríbirlo es más difícil, porque no es raro tener errores con paréntesis o con el orden en el que deseamos que ocurran las funciones.
+
+Si usamos el pipe, las cosas son más sencillas de leer y escribir.
+```{r}
+1:80 %>% 
+  matrix(ncol = 4) %>% 
+  scale() %>% 
+  princomp() %>% 
+  summary()
+```
+
+Esta secuencia de funciones en un pipe o pipeline, puede leerse como:
+Creamos una secuencia de números del 1 al 80; tomamos esto como argumento para la función matrix; lo que resulta de esta función lo tomamos como argumento para la función scale; lo que resultado de esta función lo tomamos como argumento para la función princomp; y lo que resulta de esta función lo tomamos como argumento para la función summary.
+
+Es largo si lo queremos expresar en voz alta, pero creo que es evidente este fragmento de código requiere de menos esfuerzo para comprenderse de un vistazo.
+
+Notarás que la función matrix tiene un argumento adicional, ncol = 4. Cuando tomamos un valor a la izquierda de un pipe como argumento para una función a la derecha, estamos asignando este valor al primero argumento de dicha función. Si esta función admite más de un argumento, podemos declararlo.
+
+Un ejempl trivial, con la función pnorm. Esta función admite como primer argumento un valor para q, el cuantil para el que deseamos calcular su probabilidad en una distribución normal. Además de este, tenemos argumentos para describir la distribución normal a la que pertenece q.
+
+De modo que podemos hacer lo siguiente.
+```{r}
+75 %>% 
+pnorm(mean = 50, sd = 10)
+```
+
+Si queremos que el valor a la izquierda del pipe sea usado para un argumento diferente al primero que admite una función, usamos un punto.
+```{r}
+50 %>% 
+  pnorm(q = 75, mean = ., sd = 10)
+```
+
+El punto es un marcador de posición o placeholder. Esencialmente, ese punto representa el resultado del pipeline hasta ese momento.
+
+Siguiendo la convención de insertar un salto de línea después de un pipe, cada función (en general) tendrá su propio renglón, por lo que es fácil quitar, agregar o editar pasos en un proceso.
+
+
+Por ejemplo, en el pipeline que cramos puedo borrar fácilmente el renglón que contiene la función `scale` o puedo cambiar las dimensiones de la matriz que se encuentran en el renglón con la función `matrix` y, naturalmente, en lugar de iniciar con una secuencia del 1 al 80, puedo tener otro argumento para empezar.
+
+```{r}
+1:800 %>% 
+  matrix(ncol = 8) %>% 
+  princomp() %>% 
+  summary()
+```
+
+Podemos asignar el resultado de funciones en un pipe (un pipeline) de la siguiente manera.
+```{r}
+resultado <- 1:100 %>% 
+  var() %>% 
+  sqrt()
+
+resultado
+```
+
+Es decir, todo un pipeline es considerado como un bloque de código y su resultado último puede asignarse a una variable.
+
