@@ -1,5 +1,5 @@
 ---
-title: "Introducción a dplyr"
+title: "Tutorial de dplyr"
 author: "Juan Bosco Mendoza Vega"
 date: "23/8/2019"
 output: html_document
@@ -8,54 +8,66 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-Vamos a ver una introducción breve al paquete dplyr de R.
+En este tutorial vamos a conocer el paquete `dplyr` de R y las funciones que nos ofrece para el análisis de datos. 
 
-Este paquete contiene funciones que hacen más intuitiva la manipulación y transformación de datos, entre ellas, muchas utilidades para trabajar con data frame.
+`dplyr` cuenta con funciones que hacen más intuitiva y consistente para la manipulación y transformación de datos. Entre ellas, nos encontraremos con funciones sumamente útiles para trabajar con data frames.
 
-Para instalar `dplyr` usamos la función `install.packages()`.
+En mi trabajo cotidiano, prefiero usar `dplyr` en lugar de las funciones de R base ya que me permiten concentrarme en el problema que intento resolver, en lugar de tratar de recordar las muchas inconsistencias en funcionalidad que ha acumulado R a través del tiempo.
 
-Aunque es posible instalar únicamente `dplyr` con `install.packages("dplyr")`, es recomendable instalar todo el meta paquete `tidyverse`. Esto instalará una familia de paquetes que tiene como objetivo facilitar el uso de R y que sin duda te serán de utilidad en el futuro.
+Comencemos instalando `dplyr`.
+
+# Instalación
+Usamos la función `install.packages()` para instalar `dplyr`.
+
+Aunque podemos instalar `dplyr` con `install.packages("dplyr")`, es recomendable instalar todo el meta paquete `tidyverse`. 
+
+De este modo instalamos una familia de paquetes que tiene como objetivo facilitar el uso de R, que incluye herramientas para programación funcional, visualización de datos, manejo de factores y muchas cosas más. Sin duda te serán de utilidad en el futuro.
 
 ```{r, eval = FALSE}
 install.packages("tidyverse")
 ```
 
-Una vez instalado, cargamos este paquete a nuestra área de trabajo.
+Una vez instalado, cargamos este paquete a nuestra área de trabajo y estamos listos para trabajar.
 
 ```{r}
 library(tidyverse)
 ```
 
-Lo primero que veremos de `dplyr` es un operador que toma del paquete `magrittr`, el pipe: `%>%`
+# El operador pipe
+Lo primero que revisaremos es un operador que `dplyr` toma del paquete `magrittr`, el pipe: `%>%`
 
-Este operador se puede leer como "toma como argumento lo que está del lado izquierdo para lo hacer lo que está del lado derecho".
+Este operador se puede leer como "toma lo que está del lado izquierdo como argumento para lo hacer lo que está del lado derecho".
 
-Puede sonar un poco raro, pero este operador ayuda a escribir código fácil de entender y depurar. En lugar de anidar funciones, como es lo habitual en R, las escribes una después de otra, en el orden que desees que se ejecuten.
+Con este operador es más sencillo escribir código fácil de entender y depurar. En lugar de anidar funciones, como es lo habitual en R, las escribimos una después de otra, de izquierda a derecho y de arriba a abajo, en el orden que deseamos ejecutarlas.
 
-Veamos esto en acción.
+Lo anterior puede sonar un poco raro pero es fácil de entender al verlo en práctica.
 
-Su quisiera obtener la media de una secuencia de diez números, normalmente hago lo siguiente.
+Si quisiera obtener la media de una secuencia de diez números, normalmente haría lo siguiente.
+
 ```{r}
 mean(1:10)
 ```
 
-Con el pipe, puedo relizar la misma tarea, expresada de una manera diferente.
+Con un pipe puedo relizar la misma tarea expresada de la siguiente forma.
+
 ```{r}
 1:10 %>% mean()
 ```
 
-Esto parece muy ocioso, porque estamos escribiendo más y no es evidente una ganancia en claridad.
+Visto así, no parece la gran cosa, escribimos más y no es evidente que ganamos con ello.
 
-Cuando el pipe es realmente útil es al momento de realizar múltiples operaciones en secuencia.
+Es al momento de realizar múltiples operaciones que el pipe demuestra su utilidad.
 
-Por ejemplo, si por alguna razón quisiera correr un análisis de componentes principales a partir de una secuencia de números consecutivos, a los cuales les aplico una normalización y, con esos resultados, obtener un resumen de la importancia de los componentes extraidos, haría lo siguiente.
+Si, por alguna razón, quisiera correr un análisis de componentes principales a partir de una secuencia de números consecutivos, a los cuales les aplico una normalización y, con esos resultados, obtener un resumen que muestre la importancia de los componentes extraidos, haría lo siguiente.
+
 ```{r}
 summary(princomp(scale(matrix(1:80, ncol = 4))))
 ```
 
-No es tan difícil de leer, siempre y cuando busques el nivel más profundo de anidación. Escríbirlo es más difícil, porque no es raro tener errores con paréntesis o con el orden en el que deseamos que ocurran las funciones.
+Con un poco de práctica, no es tan difícil de leer la expresión anterior. Buscas el nivel más profundo de anidación y lees de adentro hacia afuera. Esta es también la manera de escribir estos bloques de código, de modo que no es raro tener errores con paréntesis o con el orden en el que deseamos que ocurran las funciones. 
 
-Si usamos el pipe, las cosas son más sencillas de leer y escribir.
+Si usamos el pipe, la secuencia de operaciones anterior es más sencilla de leer y escribir.
+
 ```{r}
 1:80 %>% 
   matrix(ncol = 4) %>% 
@@ -64,8 +76,8 @@ Si usamos el pipe, las cosas son más sencillas de leer y escribir.
   summary()
 ```
 
-Esta secuencia de funciones en un pipe o pipeline, puede leerse como:
-Creamos una secuencia de números del 1 al 80; tomamos esto como argumento para la función matrix; lo que resulta de esta función lo tomamos como argumento para la función scale; lo que resultado de esta función lo tomamos como argumento para la función princomp; y lo que resulta de esta función lo tomamos como argumento para la función summary.
+Esta secuencia de funciones puede leerse como:
+Generamos  una secuencia de números del 1 al 80; tomamos su resultado como argumento para la función matrix; lo que resulta de esta función lo tomamos como argumento para la función scale; lo que resultado de esta función lo tomamos como argumento para la función princomp; y lo que resulta de esta función lo tomamos como argumento para la función summary.
 
 Es largo si lo queremos expresar en voz alta, pero creo que es evidente este fragmento de código requiere de menos esfuerzo para comprenderse de un vistazo.
 
