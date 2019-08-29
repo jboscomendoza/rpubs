@@ -92,12 +92,34 @@ pnorm(mean = 50, sd = 10)
 ```
 
 Si queremos que el valor a la izquierda del pipe sea usado para un argumento diferente al primero que admite una función, usamos un punto.
+
+El **punto es un marcador de posición o placeholder**. Este punto representa el resultado del pipeline hasta ese momento y podemos realizar operaciones con él.
+
+De este modo, podemos usar el punto para cualquier argumento que deseemos.
 ```{r}
+# . como mean
 50 %>% 
-  pnorm(q = 75, mean = ., sd = 10)
+  pnorm(q = 75, mean = ., sd = 100)
+
+# . como sd
+50 %>% 
+  pnorm(q = 75, mean = 100, sd = .)
 ```
 
-El punto es un marcador de posición o placeholder. Esencialmente, ese punto representa el resultado del pipeline hasta ese momento.
+Para realizar operaciones con el punto, usamos llaves.
+
+```{r}
+50 %>% 
+  {. * 10}
+```
+
+Lo que ocurre dentro de las llaves, en realidad, sigue las mismas reglas que el código que pertenece a una función. De modo que lo anterior, es equivalente a escribir el bloque siguiente.
+
+```{r}
+50 %>% 
+  {environment()}
+```
+
 
 Siguiendo la convención de insertar un salto de línea después de un pipe, cada función (en general) tendrá su propio renglón, por lo que es fácil quitar, agregar o editar pasos en un proceso.
 
