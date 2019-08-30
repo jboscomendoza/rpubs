@@ -2,7 +2,11 @@
 title: "Tutorial de dplyr"
 author: "Juan Bosco Mendoza Vega"
 date: "23/8/2019"
-output: html_document
+output: 
+  html_document: 
+    df_print: tibble
+    highlight: haddock
+    theme: yeti
 ---
 
 ```{r setup, include=FALSE}
@@ -27,7 +31,7 @@ De este modo instalamos una familia de paquetes que tiene como objetivo facilita
 install.packages("tidyverse")
 ```
 
-Una vez instalado, cargamos este paquete a nuestra área de trabajo y estamos listos para trabajar.
+Una vez instalado, cargamos este paquete a nuestro entorno de trabajo. Seguramente verás un par de advertencias, pero es normal, dado que hay funciones de `stat` que son reemplazadas por otras al cargar `tidyverse`.
 
 ```{r}
 library(tidyverse)
@@ -36,7 +40,7 @@ library(tidyverse)
 # El operador pipe
 Lo primero que revisaremos es un operador que `dplyr` toma del paquete `magrittr`, el pipe: `%>%`
 
-Este operador se puede leer como "toma lo que está del lado izquierdo como argumento para lo hacer lo que está del lado derecho".
+Este operador se puede leer como "**toma lo que está del lado izquierdo como argumento para lo hacer lo que está del lado derecho**".
 
 Con este operador es más sencillo escribir código fácil de entender y depurar. En lugar de anidar funciones, como es lo habitual en R, las escribimos una después de otra, de izquierda a derecho y de arriba a abajo, en el orden que deseamos ejecutarlas.
 
@@ -106,34 +110,22 @@ De este modo, podemos usar el punto para cualquier argumento que deseemos.
   pnorm(q = 75, mean = 100, sd = .)
 ```
 
-Para realizar operaciones con el punto, usamos llaves.
+Usando el placeholder, podemos crear bloques de código que realicen cualquier tipo de operación, usando llaves después de un pipe.
+
+De este modo, puedes realizar operaciones como la siguiente.
 
 ```{r}
-50 %>% 
-  {. * 10}
+1:10 %>% 
+  { . - mean(.)}
+  
 ```
 
-Lo que ocurre dentro de las llaves, en realidad, sigue las mismas reglas que el código que pertenece a una función. De modo que lo anterior, es equivalente a escribir el bloque siguiente.
+Este no es un uso muy común de dplyr, pero es bueno lo tengas en mente, puede sacarte de un apuro.
 
-```{r}
-50 %>% 
-  {environment()}
-```
+Una nota para usuarios más avanzados: lo que ocurre dentro de las llaves, en realidad, ocurre en su propio entorno, lo cual puedes comprobar con la función `environment`. Puedes pensar en ello como una forma de función anónima.
 
+Finalmente, podemos asignar el resultado de funciones en un pipe de la siguiente manera.
 
-Siguiendo la convención de insertar un salto de línea después de un pipe, cada función (en general) tendrá su propio renglón, por lo que es fácil quitar, agregar o editar pasos en un proceso.
-
-
-Por ejemplo, en el pipeline que cramos puedo borrar fácilmente el renglón que contiene la función `scale` o puedo cambiar las dimensiones de la matriz que se encuentran en el renglón con la función `matrix` y, naturalmente, en lugar de iniciar con una secuencia del 1 al 80, puedo tener otro argumento para empezar.
-
-```{r}
-1:800 %>% 
-  matrix(ncol = 8) %>% 
-  princomp() %>% 
-  summary()
-```
-
-Podemos asignar el resultado de funciones en un pipe (un pipeline) de la siguiente manera.
 ```{r}
 resultado <- 1:100 %>% 
   var() %>% 
@@ -142,5 +134,103 @@ resultado <- 1:100 %>%
 resultado
 ```
 
-Es decir, todo un pipeline es considerado como un bloque de código y su resultado último puede asignarse a una variable.
+Siguiendo la convención de insertar un salto de línea después de un pipe, la tarea de quitar, agregar o editar pasos a un proceso se vuelve más fácil.
 
+Por ejemplo, en el pipeline que creamos más arriba, podemos borrar fácilmente el renglón que contiene la función `scale`, o cambiar los argumentos de la función `matrix`, o iniciar con una secuencia del 1 al 80, entre muchos otros cambios.
+
+```{r}
+1:800 %>% 
+  matrix(ncol = 8) %>% 
+  princomp() %>% 
+  summary()
+```
+
+Veamos ahora las principales funciones para manipular data frames.
+
+# Manipulando data frames
+
+Probablemente la tarea más común al manipular data frames es obtener sub conjuntos de columnas y renglones.
+
+Para realizar esta tarea, tradicionalmente usamos corchetes o la función `subset`.
+
+Por ejemplo, hacemos lo siguiente para obtener los datos de las columnas Petal.Width y Petal.Length del data frame `iris`, incluido en R base, en las que Sepal.Width es mayor que 3.8 y Species es igual a setosa.
+
+```{r}
+iris[iris$Sepal.Width > 3.8 & iris$Species == "setosa", c("Petal.Width", "Petal.Length")]
+```
+
+Este método de por sí ya es un poco enredado, pero además tiene la particularidad de que no siempre te va a devolver un data frame como resultado.
+
+Por ejemplo, si solo pedimos resultados de la columna Petal.Width, obtenemos un vector.
+
+```{r}
+iris[iris$Sepal.Width > 3.8 & iris$Species == "setosa", "Petal.Width"]
+```
+
+Con las funciones `select` y `filter`, no solo hacemos más fácil obtener subconjuntos de un data frame, sino que además, nos aseguramos que siempre vamos a obtener un data frame como resultado.
+
+## La función select
+`select` es usada para seleccionar columnas de un data frame. Esta función pide como argumento el nombre de las columnas que deseamos elegir.
+
+Por ejemplo, las columnas Petal.Width y Petal.Length.
+
+```{r}
+iris %>% 
+  select(Petal.Width, Petal.Length)
+```
+
+Notarás que no es necesario escribir el nombre de las columnas entre comillas, pero si lo deseas, puedes hacerlo. Esto es sumamente útil cuando estás creando funciones usando dplyr.
+
+```{r}
+iris %>% 
+  select("Petal.Width", "Petal.Length")
+```
+
+También es posible seleccionar columnas por su índice, es decir, su número de columna.
+```{r}
+iris %>% 
+  select(3, 4)
+```
+
+Si, por el contrario, lo que queremos es excluir una columna de un data frame, simplemente agregamos el signo menos (`-`) antes del nombre de la columna.
+
+Excluimos la columna Species de iris de la siguiente manera.
+
+```{r}
+iris %>% 
+  select(-Species)
+```
+
+Si deseamos excluir más de una columna y evitar escribir un guion antes del nombre de cada una de ellas, escribimos sus nombres como parte de un vector. 
+
+Por ejemplo, para excluir las columnas Petal.Length y Species.
+
+```{r}
+iris %>% 
+  select(-c(Sepal.Length, Sepal.Width, Species))
+```
+
+Si conocemos el orden de las columnas en un data frame, podemos usar dos puntos (`:`) para elegir rangos de columnas.
+
+Por ejemplo, para elegir todas las columnas, en orden, desde Sepal.Width a Petal.Width.
+
+```{r}
+iris %>% 
+  select(Sepal.Width:Petal.Width)
+```
+
+Lo anterior no funciona para exclusiones. Debemos escribir el rango como parte de un vector.
+
+Entonces, esto no funciona.
+
+```{r, error = TRUE}
+iris %>% 
+  select(-Sepal.Width:Petal.Width)
+```
+
+Pero esto sí.
+
+```{r}
+iris %>% 
+  select(-c(Sepal.Width:Petal.Width))
+```
