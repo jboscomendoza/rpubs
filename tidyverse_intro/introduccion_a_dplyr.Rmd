@@ -1,0 +1,334 @@
+---
+title: "Tutorial de dplyr"
+author: "Juan Bosco Mendoza Vega"
+date: "23/8/2019"
+output: 
+  html_document: 
+    df_print: tibble
+    highlight: haddock
+    theme: yeti
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+En este tutorial vamos a conocer el paquete `dplyr` de R y las funciones que nos ofrece para el análisis de datos. Las explicaciones pueden un poco largas para algunas características de este paquete, así que es buena idea que uses el índice de contenido para ir al tema de tu interés.
+
+# Qué es dplyr
+`dplyr` es un paquete de R que cuenta con funciones que hacen más intuitiva y consistente para la manipulación y transformación de datos. Entre ellas, nos encontraremos con funciones sumamente útiles para trabajar con data frames.
+
+En mi trabajo cotidiano, prefiero usar `dplyr` en lugar de las funciones de R base ya que me permiten concentrarme en el problema que intento resolver, en lugar de tratar de recordar las muchas inconsistencias en funcionalidad que ha acumulado R a través del tiempo.
+
+# Instalación
+Usamos la función `install.packages()` para instalar `dplyr`.
+
+Aunque podemos instalar `dplyr` con `install.packages("dplyr")`, es recomendable instalar todo el meta paquete `tidyverse`. 
+
+De este modo instalamos una familia de paquetes que tiene como objetivo facilitar el uso de R, que incluye herramientas para programación funcional, visualización de datos, manejo de factores y muchas cosas más. Sin duda te serán de utilidad en el futuro.
+
+```{r, eval = FALSE}
+install.packages("tidyverse")
+```
+
+Una vez instalado, cargamos este paquete a nuestro entorno de trabajo. Seguramente verás un par de advertencias, pero es normal, dado que hay funciones de `stat` que son reemplazadas por otras al cargar `tidyverse`.
+
+```{r}
+library(tidyverse)
+```
+
+# El operador pipe
+Lo primero que revisaremos es un operador que `dplyr` toma del paquete `magrittr`, el pipe: `%>%`
+
+Este operador se puede leer como "**toma lo que está del lado izquierdo como argumento para lo hacer lo que está del lado derecho**".
+
+Con este operador es más sencillo escribir código fácil de entender y depurar. En lugar de anidar funciones, como es lo habitual en R, las escribimos una después de otra, de izquierda a derecho y de arriba a abajo, en el orden que deseamos ejecutarlas.
+
+Lo anterior puede sonar un poco raro pero es fácil de entender al verlo en práctica.
+
+Si quisiera obtener la media de una secuencia de diez números, normalmente haría lo siguiente.
+
+```{r}
+mean(1:10)
+```
+
+Con un pipe puedo relizar la misma tarea expresada de la siguiente forma.
+
+```{r}
+1:10 %>% mean()
+```
+
+Visto así, no parece la gran cosa, escribimos más y no es evidente que ganamos con ello.
+
+Es al momento de realizar múltiples operaciones que el pipe demuestra su utilidad.
+
+Si, por alguna razón, quisiera correr un análisis de componentes principales a partir de una secuencia de números consecutivos, a los cuales les aplico una normalización y, con esos resultados, obtener un resumen que muestre la importancia de los componentes extraidos, haría lo siguiente.
+
+```{r}
+summary(princomp(scale(matrix(1:80, ncol = 4))))
+```
+
+Con un poco de práctica, no es tan difícil de leer la expresión anterior. Buscas el nivel más profundo de anidación y lees de adentro hacia afuera. Esta es también la manera de escribir estos bloques de código, de modo que no es raro tener errores con paréntesis o con el orden en el que deseamos que ocurran las funciones. 
+
+Si usamos el pipe, la secuencia de operaciones anterior es más sencilla de leer y escribir.
+
+```{r}
+1:80 %>% 
+  matrix(ncol = 4) %>% 
+  scale() %>% 
+  princomp() %>% 
+  summary()
+```
+
+Esta secuencia de funciones puede leerse como:
+Generamos  una secuencia de números del 1 al 80; tomamos su resultado como argumento para la función matrix; lo que resulta de esta función lo tomamos como argumento para la función scale; lo que resultado de esta función lo tomamos como argumento para la función princomp; y lo que resulta de esta función lo tomamos como argumento para la función summary.
+
+Es largo si lo queremos expresar en voz alta, pero creo que es evidente este fragmento de código requiere de menos esfuerzo para comprenderse de un vistazo.
+
+Notarás que la función matrix tiene un argumento adicional, ncol = 4. Cuando tomamos un valor a la izquierda de un pipe como argumento para una función a la derecha, estamos asignando este valor al primero argumento de dicha función. Si esta función admite más de un argumento, podemos declararlo.
+
+Un ejempl trivial, con la función pnorm. Esta función admite como primer argumento un valor para q, el cuantil para el que deseamos calcular su probabilidad en una distribución normal. Además de este, tenemos argumentos para describir la distribución normal a la que pertenece q.
+
+De modo que podemos hacer lo siguiente.
+```{r}
+75 %>% 
+pnorm(mean = 50, sd = 10)
+```
+
+Si queremos que el valor a la izquierda del pipe sea usado para un argumento diferente al primero que admite una función, usamos un punto.
+
+El **punto es un marcador de posición o placeholder**. Este punto representa el resultado del pipeline hasta ese momento y podemos realizar operaciones con él.
+
+De este modo, podemos usar el punto para cualquier argumento que deseemos.
+```{r}
+# . como mean
+50 %>% 
+  pnorm(q = 75, mean = ., sd = 100)
+
+# . como sd
+50 %>% 
+  pnorm(q = 75, mean = 100, sd = .)
+```
+
+Usando el placeholder, podemos crear bloques de código que realicen cualquier tipo de operación, usando llaves después de un pipe.
+
+De este modo, puedes realizar operaciones como la siguiente.
+
+```{r}
+1:10 %>% 
+  { . - mean(.)}
+  
+```
+
+Este no es un uso muy común de dplyr, pero es bueno lo tengas en mente, puede sacarte de un apuro.
+
+Una nota para usuarios más avanzados: lo que ocurre dentro de las llaves, en realidad, ocurre en su propio entorno, lo cual puedes comprobar con la función `environment()`. Puedes pensar en ello como una forma de función anónima.
+
+Finalmente, podemos asignar el resultado de funciones en un pipe de la siguiente manera.
+
+```{r}
+resultado <- 1:100 %>% 
+  var() %>% 
+  sqrt()
+
+resultado
+```
+
+Siguiendo la convención de insertar un salto de línea después de un pipe, la tarea de quitar, agregar o editar pasos a un proceso se vuelve más fácil.
+
+Por ejemplo, en el pipeline que creamos más arriba, podemos borrar fácilmente el renglón que contiene la función `scale()`, o cambiar los argumentos de la función `matrix()`, o iniciar con una secuencia del 1 al 80, entre muchos otros cambios.
+
+```{r}
+1:800 %>% 
+  matrix(ncol = 8) %>% 
+  princomp() %>% 
+  summary()
+```
+
+Veamos ahora las principales funciones para manipular data frames.
+
+# Obteniendo subconjuntos de un data frames
+
+Probablemente la tarea más común al manipular data frames es obtener subconjuntos de columnas y renglones. 
+
+Para realizar esta tarea, tradicionalmente usamos corchetes o la función `subset()`. 
+
+Por ejemplo, usamos corchetes para obtener los datos del data frame `iris`, incluido con R base, de las columnas Petal.Width y Petal.Length en las que Sepal.Width es mayor que 3.8 y Species sea igual a "setosa".
+
+```{r}
+iris[iris$Sepal.Width > 3.8 & iris$Species == "setosa", c("Petal.Width", "Petal.Length")]
+```
+
+Este método de por sí ya es un poco enredado, pero además tiene la particularidad de que no siempre te va a devolver un data frame como resultado.
+
+Por ejemplo, si solo pedimos resultados de la columna Petal.Width, obtenemos un vector.
+
+```{r}
+iris[iris$Sepal.Width > 3.8 & iris$Species == "setosa", "Petal.Width"]
+```
+
+Con las funciones `select()` y `filter()`, no solo hacemos más fácil obtener subconjuntos de un data frame, sino que además, nos aseguramos que siempre vamos a obtener un data frame como resultado.
+
+## La función select
+`select()` es una función para seleccionar columnas de un data frame. Esta función pide como argumento el nombre de las columnas que deseamos conservar al obtener un subconjunto de un data frame.
+
+Seleccionamos las columnas Petal.Width y Petal.Length de `iris` de la siguiente manera.
+
+```{r}
+iris %>% 
+  select(Petal.Width, Petal.Length)
+```
+
+Las columnas son devueltas como un data frame y en el orden que las pedimos.
+
+Notarás que no es necesario escribir el nombre de las columnas entre comillas, como cadenas de texto, pero tienes la opción de hacerlo. 
+
+```{r}
+iris %>% 
+  select("Petal.Width", "Petal.Length")
+```
+
+De esta manera puedes usar una variable que contiene una cadena de texto para seleccionar columnas de un data frame.
+
+```{r}
+mi_nombre <- "Petal.Length"
+
+
+iris %>% 
+  select("Petal.Width", mi_nombre)
+```
+
+Es posible seleccionar columnas por su índice, es decir, su número de columna.
+
+Seleccionamos la primera y quinta columnas de `iris`.
+```{r}
+iris %>% 
+  select(1, 4)
+```
+
+Podemos usar rangos numéricos.
+
+```{r}
+iris %>% 
+  select(1:3)
+```
+
+Y podemos combinar nombres, nombres con comillas e índices. Sin embargo, es recomendable ser consistente en la manera de nombrar las columnas que pedimos a la función `select()`.
+
+```{r}
+iris %>% 
+  select(Species, "Petal.Width", 2)
+```
+
+
+Si, por el contrario, lo que queremos es excluir una columna de un data frame, simplemente agregamos el signo menos (`-`) antes del nombre de la columna a excluir.
+
+Así excluimos la columna Species de `iris`.
+
+```{r}
+iris %>% 
+  select(-Species)
+```
+
+Si deseamos excluir más de una columna y evitar escribir un guion antes del nombre de cada una de ellas, escribimos sus nombres como parte de un vector con la función `c`. 
+
+Por ejemplo, para excluir las columnas Petal.Length y Species, escribimos lo siguiente.
+
+```{r}
+iris %>% 
+  select(-c(Sepal.Length, Sepal.Width, Species))
+```
+
+Podemos combinar inclusiones y exclusiones. 
+
+Generalmente, esto es útil al programar. Hay ocasiones en las que deseas incluir o excluir columnas, pero esto depende del resultado de alguna operación, el cual no conoces de antemano.
+
+```{r}
+iris %>% 
+  select(Petal.Width, Petal.Length, -Species)
+```
+
+
+Si conocemos el orden de las columnas en un data frame, podemos usar dos puntos (`:`) para elegir rangos de columnas.
+
+Por ejemplo, para elegir todas las columnas, en orden, desde Sepal.Width a Petal.Width.
+
+```{r}
+iris %>% 
+  select(Sepal.Width:Petal.Width)
+```
+
+Lo anterior no funciona para exclusiones. Debemos escribir el rango como parte de un vector.
+
+Entonces, esta manera de excluir columnas no funciona.
+
+```{r, error = TRUE}
+iris %>% 
+  select(-Sepal.Width:Petal.Width)
+```
+
+Pero si incluimos el rango como argumento de la función `c`, entonces sí tenemos éxito.
+
+```{r}
+iris %>% 
+  select(-c(Sepal.Width:Petal.Width))
+```
+
+Si damos como argumento a select el nombre de una columna que no existe en el data frame, se nos devuelve un error, incluso si hay otros argumentos válidos. Esta característica es útil al hacer debugging y evita resultados inesperados.
+
+```{r, error = TRUE}
+iris %>% 
+  select("Petal.Width", "Region")
+```
+
+
+Además, tenemos funciones auxiliares para seleccionar columnas cuyos nombres cumplen con criterios específicos. Estas funciones deben ser llamas dentro de `select()`.
+
+* `starts_with()`: Empieza con una cadena de texto.
+* `ends_with()`: Termina con una cadena de texto.
+* `contains()`: Contiene una cadena de texto.
+
+Puedes elegir las columnas con nombres que empiezan con "Petal".
+
+```{r}
+iris %>% 
+  select(starts_with("Petal"))
+```
+
+Columnas con nombres que terminan con "Length".
+
+```{r}
+iris %>% 
+  select(ends_with("Length"))
+```
+
+Columnas con nombres que contienen "epal".
+```{r}
+iris %>% 
+  select(contains("epal"))
+```
+
+Columnas que coinciden con una la expresión regular "inicia con Pet o Sep".
+
+```{r}
+iris %>% 
+  select(matches("^(Pet|Sep)"))
+```
+
+
+```{r}
+data.frame(
+  x1 = 1,
+  x2 = 2,
+  x3 = 3,
+  x4 = 4
+) %>% 
+  select(num_range("x", 2:3))
+```
+
+Finalmente, tienes las siguientes funciones, que tienen usos un poco más especializados.
+
+* `num_range()` : Pide dos argumentos, un prefijo y un rango numérico. Si tienes columnas que tienen nombres como var1, var2, var3 ... var100, puedes usar esta función para elegir las columnas var80 a var90 con `num_range("var", 80:90)`
+* `one_of()`: Devuelve una columna con un nombre igual a alguno de los valores dentro de un vector. Si no coincide con alguno, en lugar de un error, devuelve una advertencia.
+* `everything()`: Selecciona todas las columnas. No es necesario dar argumentos.
+* `last_col()`: Selecciona la última columna, de izquierda a derecha. Puedes darle como argumento valores numéricos para elegir, la penultima columna con 1, la antepenultima con 2, y así sucesivamente.
+
