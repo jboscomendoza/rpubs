@@ -12,13 +12,12 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-En este tutorial vamos a conocer el paquete `dplyr` de R y las funciones que nos ofrece para el análisis de datos. 
+En este tutorial vamos a conocer el paquete `dplyr` de R y las funciones que nos ofrece para el análisis de datos. Las explicaciones pueden un poco largas para algunas características de este paquete, así que es buena idea que uses el índice de contenido para ir al tema de tu interés.
 
-`dplyr` cuenta con funciones que hacen más intuitiva y consistente para la manipulación y transformación de datos. Entre ellas, nos encontraremos con funciones sumamente útiles para trabajar con data frames.
+# Qué es dplyr
+`dplyr` es un paquete de R que cuenta con funciones que hacen más intuitiva y consistente para la manipulación y transformación de datos. Entre ellas, nos encontraremos con funciones sumamente útiles para trabajar con data frames.
 
 En mi trabajo cotidiano, prefiero usar `dplyr` en lugar de las funciones de R base ya que me permiten concentrarme en el problema que intento resolver, en lugar de tratar de recordar las muchas inconsistencias en funcionalidad que ha acumulado R a través del tiempo.
-
-Comencemos instalando `dplyr`.
 
 # Instalación
 Usamos la función `install.packages()` para instalar `dplyr`.
@@ -122,7 +121,7 @@ De este modo, puedes realizar operaciones como la siguiente.
 
 Este no es un uso muy común de dplyr, pero es bueno lo tengas en mente, puede sacarte de un apuro.
 
-Una nota para usuarios más avanzados: lo que ocurre dentro de las llaves, en realidad, ocurre en su propio entorno, lo cual puedes comprobar con la función `environment`. Puedes pensar en ello como una forma de función anónima.
+Una nota para usuarios más avanzados: lo que ocurre dentro de las llaves, en realidad, ocurre en su propio entorno, lo cual puedes comprobar con la función `environment()`. Puedes pensar en ello como una forma de función anónima.
 
 Finalmente, podemos asignar el resultado de funciones en un pipe de la siguiente manera.
 
@@ -136,7 +135,7 @@ resultado
 
 Siguiendo la convención de insertar un salto de línea después de un pipe, la tarea de quitar, agregar o editar pasos a un proceso se vuelve más fácil.
 
-Por ejemplo, en el pipeline que creamos más arriba, podemos borrar fácilmente el renglón que contiene la función `scale`, o cambiar los argumentos de la función `matrix`, o iniciar con una secuencia del 1 al 80, entre muchos otros cambios.
+Por ejemplo, en el pipeline que creamos más arriba, podemos borrar fácilmente el renglón que contiene la función `scale()`, o cambiar los argumentos de la función `matrix()`, o iniciar con una secuencia del 1 al 80, entre muchos otros cambios.
 
 ```{r}
 1:800 %>% 
@@ -147,13 +146,13 @@ Por ejemplo, en el pipeline que creamos más arriba, podemos borrar fácilmente 
 
 Veamos ahora las principales funciones para manipular data frames.
 
-# Manipulando data frames
+# Obteniendo subconjuntos de un data frames
 
-Probablemente la tarea más común al manipular data frames es obtener sub conjuntos de columnas y renglones.
+Probablemente la tarea más común al manipular data frames es obtener subconjuntos de columnas y renglones. 
 
-Para realizar esta tarea, tradicionalmente usamos corchetes o la función `subset`.
+Para realizar esta tarea, tradicionalmente usamos corchetes o la función `subset()`. 
 
-Por ejemplo, hacemos lo siguiente para obtener los datos de las columnas Petal.Width y Petal.Length del data frame `iris`, incluido en R base, en las que Sepal.Width es mayor que 3.8 y Species es igual a setosa.
+Por ejemplo, usamos corchetes para obtener los datos del data frame `iris`, incluido con R base, de las columnas Petal.Width y Petal.Length en las que Sepal.Width es mayor que 3.8 y Species sea igual a "setosa".
 
 ```{r}
 iris[iris$Sepal.Width > 3.8 & iris$Species == "setosa", c("Petal.Width", "Petal.Length")]
@@ -167,48 +166,87 @@ Por ejemplo, si solo pedimos resultados de la columna Petal.Width, obtenemos un 
 iris[iris$Sepal.Width > 3.8 & iris$Species == "setosa", "Petal.Width"]
 ```
 
-Con las funciones `select` y `filter`, no solo hacemos más fácil obtener subconjuntos de un data frame, sino que además, nos aseguramos que siempre vamos a obtener un data frame como resultado.
+Con las funciones `select()` y `filter()`, no solo hacemos más fácil obtener subconjuntos de un data frame, sino que además, nos aseguramos que siempre vamos a obtener un data frame como resultado.
 
 ## La función select
-`select` es usada para seleccionar columnas de un data frame. Esta función pide como argumento el nombre de las columnas que deseamos elegir.
+`select()` es una función para seleccionar columnas de un data frame. Esta función pide como argumento el nombre de las columnas que deseamos conservar al obtener un subconjunto de un data frame.
 
-Por ejemplo, las columnas Petal.Width y Petal.Length.
+Seleccionamos las columnas Petal.Width y Petal.Length de `iris` de la siguiente manera.
 
 ```{r}
 iris %>% 
   select(Petal.Width, Petal.Length)
 ```
 
-Notarás que no es necesario escribir el nombre de las columnas entre comillas, pero si lo deseas, puedes hacerlo. Esto es sumamente útil cuando estás creando funciones usando dplyr.
+Las columnas son devueltas como un data frame y en el orden que las pedimos.
+
+Notarás que no es necesario escribir el nombre de las columnas entre comillas, como cadenas de texto, pero tienes la opción de hacerlo. 
 
 ```{r}
 iris %>% 
   select("Petal.Width", "Petal.Length")
 ```
 
-También es posible seleccionar columnas por su índice, es decir, su número de columna.
+De esta manera puedes usar una variable que contiene una cadena de texto para seleccionar columnas de un data frame.
+
 ```{r}
+mi_nombre <- "Petal.Length"
+
+
 iris %>% 
-  select(3, 4)
+  select("Petal.Width", mi_nombre)
 ```
 
-Si, por el contrario, lo que queremos es excluir una columna de un data frame, simplemente agregamos el signo menos (`-`) antes del nombre de la columna.
+Es posible seleccionar columnas por su índice, es decir, su número de columna.
 
-Excluimos la columna Species de iris de la siguiente manera.
+Seleccionamos la primera y quinta columnas de `iris`.
+```{r}
+iris %>% 
+  select(1, 4)
+```
+
+Podemos usar rangos numéricos.
+
+```{r}
+iris %>% 
+  select(1:3)
+```
+
+Y podemos combinar nombres, nombres con comillas e índices. Sin embargo, es recomendable ser consistente en la manera de nombrar las columnas que pedimos a la función `select()`.
+
+```{r}
+iris %>% 
+  select(Species, "Petal.Width", 2)
+```
+
+
+Si, por el contrario, lo que queremos es excluir una columna de un data frame, simplemente agregamos el signo menos (`-`) antes del nombre de la columna a excluir.
+
+Así excluimos la columna Species de `iris`.
 
 ```{r}
 iris %>% 
   select(-Species)
 ```
 
-Si deseamos excluir más de una columna y evitar escribir un guion antes del nombre de cada una de ellas, escribimos sus nombres como parte de un vector. 
+Si deseamos excluir más de una columna y evitar escribir un guion antes del nombre de cada una de ellas, escribimos sus nombres como parte de un vector con la función `c`. 
 
-Por ejemplo, para excluir las columnas Petal.Length y Species.
+Por ejemplo, para excluir las columnas Petal.Length y Species, escribimos lo siguiente.
 
 ```{r}
 iris %>% 
   select(-c(Sepal.Length, Sepal.Width, Species))
 ```
+
+Podemos combinar inclusiones y exclusiones. 
+
+Generalmente, esto es útil al programar. Hay ocasiones en las que deseas incluir o excluir columnas, pero esto depende del resultado de alguna operación, el cual no conoces de antemano.
+
+```{r}
+iris %>% 
+  select(Petal.Width, Petal.Length, -Species)
+```
+
 
 Si conocemos el orden de las columnas en un data frame, podemos usar dos puntos (`:`) para elegir rangos de columnas.
 
@@ -221,16 +259,76 @@ iris %>%
 
 Lo anterior no funciona para exclusiones. Debemos escribir el rango como parte de un vector.
 
-Entonces, esto no funciona.
+Entonces, esta manera de excluir columnas no funciona.
 
 ```{r, error = TRUE}
 iris %>% 
   select(-Sepal.Width:Petal.Width)
 ```
 
-Pero esto sí.
+Pero si incluimos el rango como argumento de la función `c`, entonces sí tenemos éxito.
 
 ```{r}
 iris %>% 
   select(-c(Sepal.Width:Petal.Width))
 ```
+
+Si damos como argumento a select el nombre de una columna que no existe en el data frame, se nos devuelve un error, incluso si hay otros argumentos válidos. Esta característica es útil al hacer debugging y evita resultados inesperados.
+
+```{r, error = TRUE}
+iris %>% 
+  select("Petal.Width", "Region")
+```
+
+
+Además, tenemos funciones auxiliares para seleccionar columnas cuyos nombres cumplen con criterios específicos. Estas funciones deben ser llamas dentro de `select()`.
+
+* `starts_with()`: Empieza con una cadena de texto.
+* `ends_with()`: Termina con una cadena de texto.
+* `contains()`: Contiene una cadena de texto.
+
+Puedes elegir las columnas con nombres que empiezan con "Petal".
+
+```{r}
+iris %>% 
+  select(starts_with("Petal"))
+```
+
+Columnas con nombres que terminan con "Length".
+
+```{r}
+iris %>% 
+  select(ends_with("Length"))
+```
+
+Columnas con nombres que contienen "epal".
+```{r}
+iris %>% 
+  select(contains("epal"))
+```
+
+Columnas que coinciden con una la expresión regular "inicia con Pet o Sep".
+
+```{r}
+iris %>% 
+  select(matches("^(Pet|Sep)"))
+```
+
+
+```{r}
+data.frame(
+  x1 = 1,
+  x2 = 2,
+  x3 = 3,
+  x4 = 4
+) %>% 
+  select(num_range("x", 2:3))
+```
+
+Finalmente, tienes las siguientes funciones, que tienen usos un poco más especializados.
+
+* `num_range()` : Pide dos argumentos, un prefijo y un rango numérico. Si tienes columnas que tienen nombres como var1, var2, var3 ... var100, puedes usar esta función para elegir las columnas var80 a var90 con `num_range("var", 80:90)`
+* `one_of()`: Devuelve una columna con un nombre igual a alguno de los valores dentro de un vector. Si no coincide con alguno, en lugar de un error, devuelve una advertencia.
+* `everything()`: Selecciona todas las columnas. No es necesario dar argumentos.
+* `last_col()`: Selecciona la última columna, de izquierda a derecha. Puedes darle como argumento valores numéricos para elegir, la penultima columna con 1, la antepenultima con 2, y así sucesivamente.
+
