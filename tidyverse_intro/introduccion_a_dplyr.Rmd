@@ -325,10 +325,46 @@ data.frame(
   select(num_range("x", 2:3))
 ```
 
-Finalmente, tienes las siguientes funciones, que tienen usos un poco más especializados.
+Finalmente, contamos con las siguientes funciones para realizar selecciones más especializadas.
 
 * `num_range()` : Pide dos argumentos, un prefijo y un rango numérico. Si tienes columnas que tienen nombres como var1, var2, var3 ... var100, puedes usar esta función para elegir las columnas var80 a var90 con `num_range("var", 80:90)`
 * `one_of()`: Devuelve una columna con un nombre igual a alguno de los valores dentro de un vector. Si no coincide con alguno, en lugar de un error, devuelve una advertencia.
 * `everything()`: Selecciona todas las columnas. No es necesario dar argumentos.
 * `last_col()`: Selecciona la última columna, de izquierda a derecha. Puedes darle como argumento valores numéricos para elegir, la penultima columna con 1, la antepenultima con 2, y así sucesivamente.
+
+## Filter
+Mientras que usamos `select()` para obtener subconjuntos de columnas de un data frame, usamos `filter()` para elegir renglones.
+
+La función `filter()`, además de tomar un data frame como argumento, toma una o varias expresiones condicionales (*predicados*) para incluir o excluir datos. Sólo aquellos renglones para los que la condición sea verdadera (`TRUE`) son incluidos en el subconjunto extraído.
+
+De nuevo, esto puede sonar un tanto enredado, pero es más fácil entender de se trata al verlo en acción.
+
+Vamos a usar el conjunto de datos `storms` incluido con `dplyr`, el cual que contiene información de huracanes desde 1975 a 2015. Demos un vistazo a su contenido.
+
+```{r}
+storms
+```
+
+Vamos a seleccionar todos los datos del año 2000, es decir, todos los renglones de `storms` para los que `year == 2000` sea `TRUE`.
+
+```{r}
+storms %>% 
+  filter(year == 2000)
+```
+
+A diferencia de `select()`, no podemos escribir entre comillas los nombres de las columnas que deseamos usar como condicionales. Si lo intentamos obtenemos resultados inesperados.
+
+```{r, error = TRUE}
+storms %>% 
+  filter("year" == 2000)
+```
+
+Esto se deba a que `filter()` *siempre* espera que proporcionemos nombres de columnas sin comillas por el tipo de evaluación no estándar que hace de sus argumentos.
+
+En caso de que sea indispensable usar nombres de columnas entre comillas, puedes hacerlo de la siguiente manera.
+
+```{r}
+filter(storms,  !!sym("year") == 2000)
+```
+
 
