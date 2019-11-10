@@ -1,0 +1,198 @@
+---
+title: "Correlación biserial puntual - Psicometría en R"
+author: "Juan Bosco Mendoza Vega"
+date: "8/11/2019"
+output: 
+  html_document: 
+    highlight: haddock
+    theme: yeti
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = "")
+```
+
+Al evaluar la calidad de un instrumento psicométrico, una de las tareas más importantes es analizar las características de los ítems (reactivos) que lo conforman. Una de ellas es el índice de discriminación, la cual es tomada en cuenta tanto en Teoría Clásica de los Tests (TCT) como en Teoría de la Respuesta al Ítem (TRI).
+
+En TCT, la práctica más común es utilizar el coeficiente de **correlación biserial puntual** (también llamada punto biserial) para estimar la discriminación de los ítems. De hecho, en la práctica es frecuente que la discriminación y la correlación biserial puntual sean usados de manera indistinta, aunque no son exactamente la misma cosa. Por lo tanto, es relevante conocer a qué se refiere cada uno de estos términos.
+
+En este artículo revisaremos una definición general de discriminación desde la TCT, su relación con la correlación biserial puntual y la manera de estimar este coeficiente en R.
+
+# Discriminación.
+
+El índice de discriminación es una característica de los ítems. Es expresada con valores que van de menos 1 (-1) a uno (1).
+
+La manera más común de definir a la discriminación es como **la capacidad un ítem para distinguir a personas con diferentes niveles de desempeño**.
+
+La discriminación representa la correlación que hay entre un puntaje alto en un ítem y un puntaje global alto en el instrumento al que este pertenece.
+
+Los valores de referencia generalmente usados para evaluar la calidad de los ítems de un instrumento son los siguientes.
+
+Índice de discriminación | Interpretación
+---- | -----
+1.00 a 0.50 | Muy alta (aceptable)
+0.49 a 0.30 | Alta (aceptable)
+0.29 a 0.20 | Aceptable (puede requerir revisar el ítem)
+0.19 a 0.10 | Marginal (posiblemente inaceptable, requiere revisión).
+0.09 a 0.00 | Baja (inaceptable, requiere revisión, probablemente deba eliminarse del instrumento).
+-0.01 a –0.20 | Inaceptable (requiere revisión, probablemente deba eliminarse del instrumento).
+
+## ¿Cómo interpretamos la discriminación?
+Supongamos que tenemos un instrumento de medición de diez ítems que ha sido aplicado a cien (100) personas. 
+
+Los ítems son puntuados individualmente como correcto o incorrecto. Una respuesta correcta de un ítem tiene un valor de 1 para la puntuación global del instrumento y una respuesta incorrecta tiene un valor de 0.
+En este contexto, una respuesta correcta indica, teóricamente, la presencia del rasgo que pretende medir el instrumento. Así que damos un valor de 1 cuando se ha contestado de manera positiva o alta en un ítem para instrumentos que no asumen respuestas correctas o incorrectas, sino únicamente la presencia o ausencia de un rasgo.
+De este modo la mayor puntuación global posible para este instrumento es 10y la menor es 0. 
+Entre las cien personas que contestaron el instrumento, tenemos un grupo de alto desempeño con puntajes globales altos, cercanos o iguales a 10, y un grupo de bajo desempeño con puntajes globales bajos, cercanos o iguales a 0.
+
+Si uno de los diez ítems tiene una alta discriminación, cercana a uno, esto quiere decir que una proporción alta de personas que tuvieron una puntuación correcta (alta, uno) en ese ítem también tuvieron una puntuación global alta en el instrumento (cercano o igual a diez). 
+
+De manera complementaria esto indica que una alta proporción de quienes tuvieron un puntaje bajo (incorrecto, cero) en ese ítem, también tuvieron un puntaje global bajo en el instrumento (cercano o igual a cero).
+
+Entonces podríamos tomar a todas las personas que contestaron correctamente a ese ítem y una alta proporción de ellas, la mayoría, pertenecerán al grupo con puntajes globales altos. Es decir, nos permite separar (**discriminar**) a las personas que pertenecen a los grupos de desempeño alto de las del grupo de desempeño bajo.
+
+Si, por el contrario, tenemos a un ítem con una baja discriminación, cercana a cero, nuestra capacidad de separar a las personas se reduce. Una proporción más pequeña de personas que puntuaron alto en ese ítem también tendrán una puntuación global alta en el instrumento. 
+
+De modo tal, al tomar todas las personas que contestaron correctamente ese ítem, es menos probable que pertenezcan al grupo de alto desempeño. En el peor de los casos, con una discriminación igual a cero, tendríamos a la misma cantidad de personas en de los grupos de alto y bajo desempeño. No podríamos separarlos.
+
+Entonces, si calculamos la correlación entre los puntajes de un ítem con los puntajes globales de un instrumento, entonces obtenemos el índice de discriminación. 
+
+Sin embargo, si calculamos una correlación entre una variable discreta binaria (con solo dos valores posibles) y una variable continua de manera convencional, usando el coeficiente r de Pearson o el coeficiente rho de Spearman, podríamos obtener resultados sesgados. Por esta razón es usamos un coeficiente distinto para este caso particular.
+
+# Coeficiente de correlación biserial puntual
+Para reiterar: **el coeficiente de correlación biserial puntual es un caso particular de correlación, entre una variable discreta binaria y una continua**. 
+
+Usaremos la abreviatura **rpbis** para referirnos a este coeficiente, pero también son usadas otras notaciones como $r_bis$.
+
+En el caso de psicometría, la variable discreta binaria es la respuesta a un ítem y la variable continua es el puntaje global del instrumento al que pertenece.
+
+Los valores que puede asumir este coeficiente se encuentran entre menos uno y uno, con el cero indicando que no hay correlación alguna entre las variables que estamos comparando.
+
+Una fórmula para calcular este coeficiente es la siguiente:
+
+$rpbis =\frac{M_1 - M_0}{Sn}\sqrt{\frac{n_1 n_0}{n^2}}$
+
+Donde 
+
+* $M_1$ = Media del puntaje global del instrumento del grupo que contestó de manera positiva a la variable binaria (alta, uno).
+* $M_0$ = Media del puntaje global del instrumento del grupo que contestó de manera negativa a la variable binaria (baja, cero).
+* $S_n$ = Desviación estándar del instrumento.
+* $n$ = Tamaño de la población que contestó el instrumento.
+* $n_1$ = Tamaño del grupo que contestó de manera positiva a la variable binaria.
+* $n_0$ = Tamaño del grupo que contestó de manera negativa a la variable binaria.
+
+Es un cálculo relativamente sencillo que podemos hacer a mano si es necesario, pero, por supuesto, vamos a ver su implementación en R.
+
+# Cálculo de la correlación biserial puntual en R
+Varios paquetes de R tienen funciones para calcular la correlación biserial puntual. Usaremos el paquete `ltm` que me parece tiene la implementación más sencilla de todas.
+
+Si no tenemos este paquete, lo instalamos con `install.packages("ltm")` y después de lo cargamos a nuestro espacio de trabajo.
+
+```{r, load_psych, message=FALSE}
+library(ltm)
+```
+
+La función que necesitamos se llama `biserial.cor()` que tiene los siguientes argumentos:
+
+* x: Un vector numérico. Representa los puntajes globales del instrumento.
+* y: Un vector numérico o factor. Representa la variable dicotómica, es decir, las respuestas a un ítem. Para facilitar el análisis, es ideal codificar estas respuestas como 0 y 1.
+* use: Indica qué se hará con valores perdidos. Lo fijaremos a `"complete.obs"` para usar las observaciones con valores completos, en lugar de `"all.obs"` que nos dará un error si encuentra datos perdidos.
+* level: Qué valor será usado para indicar una respuesta positiva a un ítem. Si codificamos con 0 y 1, entonces 0 será `level = 1` y 1 será `level = 2`. 
+
+## Ejemplo: Escala IQ1
+Probaremos esta función usando una versión modificada de los datos de la Escala IQ1 para medir inteligencia, la cual forma parte del repositorio Open Source Psychometrics Project.
+
+Las respuestas han sido cambiadas, de una escala de uno a diez, a una escala   binaria.
+
+Descargamos el archivo con los datos de este instrumento usando la función `download.file`. Los datos se descargaran a tu carpeta de trabajo de R (puedes ver cuál es tu carpeta de trabajo usando la función  `getwd()`).
+
+```{r, eval=FALSE}
+download.file(url = " https://raw.githubusercontent.com/jboscomendoza/rpubs/master/correlacion_punto_biserial/iq1_modificado.csv ", 
+              destfile = "iq1_modificado.zip")
+```
+
+Nuestro resultado será el archivo `iq1_modificado.csv`. 
+
+Usamos la función `data.csv` para cargar los datos de la escala IQ1 a nuestro entorno de trabajo en el objeto `iq1`.
+```{r carga_iq1}
+iq1 <- read.csv("iq1_modificado.csv")
+```
+
+Este conjunto de datos, cada renglón representa las respuestas de un participante a todos los ítems, y las columnas representan todas las respuestas, de todos los participantes, a cada ítem.
+
+Las respuestas correctas han sido codificadas con `1` y las incorrectas con `0`.
+```{r}
+head(iq1)
+```
+
+## Cálculo
+Para empezar, calculamos las puntuaciones globales de todas personas que contestaron este instrumento. Usamos la función `rowSums()` para obtener la suma de respuestas correctas por renglón.
+```{r}
+p_globales <- rowSums(iq1)
+
+# Resultado
+head(p_globales)
+```
+
+Como cada columna representa todas las respuestas a un ítem, extraemos esta información usando corchetes. Por ejemplo, las respuestas al primer ítem.
+```{r respuestas_item}
+head(iq1[1])
+```
+
+Entonces, para obtener la correlación biserial puntual del primer ítem en el instrumento, hacemos lo siguiente.
+```{r}
+biserial.cor(x = p_globales,  y = iq1[[1]], level = 2, use = "complete.obs")
+```
+
+Entonces, para obtener la correlación biserial puntual para el segundo ítem, hacemos lo siguiente.
+```{r}
+biserial.cor(x = p_globales,  y = iq1[[2]], level = 2, use = "complete.obs")
+```
+
+Como probablemente deseamos obtener esta correlación paran todos los ítems del instrumentos, podemos usar `lapply()` para este fin.
+```{r}
+lapply(iq1, biserial.cor, x = p_globales, level = 2)
+```
+
+Podemos ver que todos los ítems, excepto el último, tienen una correlación biserial puntual arriba de 0.20, es decir, tienen una discriminación aceptable.
+
+## Una función más compleja
+Finalmente, definiremos una función para hacernos más fácil estimar la discriminación de los ítems de un instrumento.
+```{r}
+rbis <- function(tabla, level = 2) {
+  score <- rowSums(tabla)
+  tabla  <- data.frame(tabla)
+  coef <- lapply(tabla, biserial.cor, x = score, level = 2, use = "complete.obs")
+  status <- ifelse(coef >= .2, "Aceptable", "No aceptable")
+  data.frame(
+    item = names(coef),
+    rbis = matrix(coef),
+    status = as.character(status)
+  )  
+}
+```
+
+Notarás que esta función incluye las operaciones que realiamos antes, agregando una llamada a `ifelse()` para etiquetar los valores mayores o iguales a 0.20 como "Aceptables" y los demás como "No aceptable".
+
+El resultado es un data frame con los nombres de los ítems, su coeficiente de discriminación y si este es aceptable o no.
+
+```{r}
+rbis(iq1)
+```
+
+# Para concluir
+La discriminación es un indicador importante de la calidad de los ítems en la Teoría Clásica de los Tests que se puede estimar de una manera sencilla en R usando la función `biserial.cor()` del paquete `ltm`.
+
+Es necesario enfatizar que la discriminación es sólo una entre muchos elementos que deben considerarse al momento de tomar cualquier decisión con respecto a un ítem, ya sea para conservarlo, revisarlo, modificarlo o eliminarlo.
+
+Una discriminación alta o baja no es suficiente información para tomar estas decisiones, siempre debe ir acompañada de más fuentes de evidencia cuantitativa y cualitativas tanto del ítem, como del instrumento de medición al que pertenece.
+
+---
+
+Consultas, dudas, comentarios y correcciones son bienvenidas:
+
+  * jboscomendoza@gmail.com
+
+El código y los datos usados en este documento se encuentran en Github:
+
+ * https://github.com/jboscomendoza/rpubs/tree/master/correlacion_punto_biserial
+
