@@ -1,5 +1,5 @@
 ---
-title: "Correlación biserial puntual - Psicometría en R"
+title: "Correlación biserial puntual - Psicometría con R"
 author: "Juan Bosco Mendoza Vega"
 date: "8/11/2019"
 output: 
@@ -106,7 +106,7 @@ Las respuestas han sido cambiadas, de una escala de uno a diez, a una escala   b
 Descargamos el archivo con los datos de este instrumento usando la función `download.file`. Los datos se descargaran a tu carpeta de trabajo de R (puedes ver cuál es tu carpeta de trabajo usando la función  `getwd()`).
 
 ```{r, eval=FALSE}
-download.file(url = " https://raw.githubusercontent.com/jboscomendoza/rpubs/master/correlacion_punto_biserial/iq1_modificado.csv ", 
+download.file(url = " https://raw.githubusercontent.com/jboscomendoza/rpubs/master/correlacion_biserial_puntual/iq1_modificado.csv ", 
               destfile = "iq1_modificado.zip")
 ```
 
@@ -194,5 +194,5 @@ Consultas, dudas, comentarios y correcciones son bienvenidas:
 
 El código y los datos usados en este documento se encuentran en Github:
 
- * https://github.com/jboscomendoza/rpubs/tree/master/correlacion_punto_biserial
+ * https://github.com/jboscomendoza/rpubs/tree/master/correlacion_biserial_puntual
 
