@@ -1,0 +1,394 @@
+---
+title: "XGBoost en R"
+author: "Juan Bosco Mendoza Vega"
+date: "8/12/2019"
+output: 
+  html_document: 
+    highlight: haddock
+    theme: yeti
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,comment = "")
+```
+
+**XGBoost** o **Extreme Gradient Boosting**, es uno de los algoritmos de machine learning de tipo supervisado más usados en la actualidad. 
+
+Este algoritmo se caracteriza por obtener buenos resultados de predicción con relativamente poco esfuerzo, en muchos casos equiparables o mejores que los devueltos por modelos más complejos computacionalmente, en particular para problemas con datos heterogéneos. 
+
+XGBoost es una herramienta muy útil para un data scientist y cuenta con implementaciones para diferentes lenguajes y entornos de programación.
+
+En este artículo revisaremos la implementación de XGBoost en R. Veremos cómo preparar los datos para usar este algoritmo, sus hiper parámetros básicos y una manera sencilla de evaluar sus resultados.
+
+Pero antes, una breve introducción a XGBoost.
+
+# Una introducción informal a XGBoost
+
+XGBoost Extreme Gradient Boosting es un algoritmo predictivo supervisado que utiliza el principio de *boosting*.
+
+La idea detrás del *boosting* es generar múltiples modelos de predicción "débiles" secuenciualmente,y que cada uno de estos tome los resultados del modelo anterior, para generar un modelo más "fuerte", con mejor poder predictivo y mayor estabilidad en sus resultados.
+
+Para conseguir un modelo más fuerte, se emplea un algoritmo de optimización, este caso *Gradient Descent* (descenso de gradiente). 
+
+Durante el entrenamiento, los parámetros de cada modelo débil son ajustados iterativamente tratando de encontrar el mínimo de una función objetivo, que puede ser la proporción de error en la clasificación, el área bajo la curva (AUC), la raíz del error cuadrático medio (RMSE) o alguna otra.
+
+Cada modelo es comparado con el anterior. Si un nuevo modelo tiene mejores resultados, entonces se toma este como base para realizar nuevas modificaciones. Si, por el contrario, tiene peores resultados, se regresa al mejor modelo anterior y se modifica ese de una manera diferente.
+
+Este proceso se repite hasta llegar a un punto en el que la diferencia entre modelos consecutivos es insignificante, lo cual nos indica que hemos encontrado el mejor modelo posible, o cuando se llega al número de iteraciones máximas definido por el usuario.
+
+XGBoost usa como sus modelos débiles árboles de decisión de diferentes tipos, que pueden ser usados para tareas de clasificación y de regresión.
+
+Si quieres conocer más sobre este algoritmo, puedes leer definiciones más formales que incluyen discusión sobre su implementación en los siguientes artículos:
+
+* [Greedy Function Approximation: A Gradient Boosting Machine (Friedman, 2001)](https://projecteuclid.org/download/pdf_1/euclid.aos/1013203451)
+* [Stochastic Gradient Boosting (Friedman, 1999)](https://astro.temple.edu/~msobel/courses_files/StochasticBoosting(gradient).pdf)
+
+Ahora veamos cómo usar XGBoost en R.
+
+# Implementación en R
+
+## Instalación
+Lo primero que necesitamos es instalar los paquetes que usaremos con `install.packages()`.
+
+`xgboost` contiene la implementación de este tipo de modelo para R.
+
+`tidyverse` es un meta paquete que carga varios paquetes a nuestro entorno de trabajo. Para nuestros fines, lo importante es que carga los siguientes:
+
+* `dplyr`. Herramientas manipular, transformar y organizar datos.
+* `readr`. Facilita importar datos desde archivos.
+* `purrr`. Agrega características de programación funcional.
+
+`caret` contiene una gran cantidad de utilidades para machine learning, pero en esta ocasión únicamente usaremos una función para generar matrices de confusión.
+
+```{r instalar, eval=FALSE}
+install.packages("xgboost")
+install.packages("tidyverse")
+install.packages("caret")
+```
+
+Cargamos los paquetes a nuestro espacio de trabajo con `library()`.
+
+```{r cargar paquetes}
+library("xgboost")
+library("tidyverse")
+library("caret")
+```
+
+# Datos que usaremos 
+El conjunto de datos que usaremos es conocido como **Agraricus**. Contiene características de diferentes hongos y lo que deseamos predecir es si son venenosos o no.
+
+En la práctica es común que tengas que lidiar con datos en formatos no convencionales que requieren preparación antes de ser usables por un algoritmo de machine learning.
+
+Por esta razón, en lugar de usar la versión de estos datos incluida en el paquete `xgboost` y que ya está lista para usar, trabajaremos con una versión de estos mismos datos que requiere preparación, pues generalmente es la etapa del flujo de trabajo de machine learning que requiere más tiempo.
+
+La versión de los datos que usaremos está disponible en el Machine Learning Repository de UCI.
+
+* https://archive.ics.uci.edu/ml/datasets/Mushroom
+
+He copiado los datos a un repositorio de github para asegurar que estés usando la misma versión que aparece en este artículo. Son dos archivos en total, uno con extensión `.data` que contiene los datos de los hongos, y otro de extensión `.names` que incluye una descripción de ellos.
+
+Descargamos ambos archivos a nuestra carpeta de trabajo usando la `download.files()` con el argumento `mode = "wb"` para asegurar que los archivos se guarden correctamente. 
+
+```{r descarga_archivos, eval=FALSE}
+download.file("https://raw.githubusercontent.com/jboscomendoza/rpubs/xgboost_r/xgboost_en_r/agaricus-lepiota.data",
+              destfile = "agaricus-lepiota.data", mode = "wb")
+download.file("https://raw.githubusercontent.com/jboscomendoza/rpubs/xgboost_r/xgboost_en_r/agaricus-lepiota.names",
+              destifile = "agaricus-lepiota.names", mode = "wb")
+```
+
+# Exploración de los datos
+Empezamos con la exploración del contenido de estos archivos. 
+
+Podemos dar una mirada a su contenido con algún procesador de texto externo, como notepad++ o gedit, pero también podemos hacer esto directamente en R con las funciones `read_lines()` y `head()`.
+
+Veamos los primeros renglones del archivo **"agaricus-lepiota.data"**.
+
+```{r head data}
+head(read_lines("agaricus-lepiota.data"))
+```
+
+Los datos se encuentran en una estructura tabular, con columnas separada por comas. Para fines prácticos, es equivalente a un archivo de extensión `.csv` pero con una extensión diferente. Eso son buenas noticias.
+
+Para evitar errores en la lectura, importaremos su contenido con la función `read.table` Esta función no trata de convertir los datos a un tipo en particular, de modo que todo será importado como de tipo caracter, lo cual previene errores más adelante.
+
+Llamamos a esta función especificando que el delimitador de columnas es una coma y convertimos su resultado a un `tibble` para mejorar la compatibilidad con los paquetes del `tidyverse` y mejorar su presentación en pantalla.
+
+```{r lectura inicial}
+original <- 
+  read.table("agaricus-lepiota.data", sep = ",") %>% 
+  tbl_df()
+```
+
+Veamos el resultado.
+
+```{r ver original}
+original
+```
+
+Continuamos con la preparación de los datos.
+
+# Preparación de los datos
+## Asignación de nombres a las variables
+Aunque este paso no es estrictamente necesario, agregaremos el nombre de cada columna, es decir, de las variables o features.
+
+Es frecuente que en la práctica tengas que trabajar con datos a los que se les ha ocultado intencionalmente el nombre de los features por seguridad o confidencialidad, entre otras razones. Sin embargo, cuando cuenta con los nombres de las variables pueden encontrar insights sobre nuestros datos que pueden ser útiles para realizar un buen análisis.
+
+Además, en nuestro ejemplo es esencial conocer cuál de las columnas es la variable objetivo, aquella en la que se encuentra etiquetado un hongo como venenoso o no.
+
+Los nombres de las variables han sido obtenidos de la información en el archivo `agaricus-lepiota.names`. La variable objetivo es la primera columna con el nombre `target`.
+
+Haremos la asignación de nombres con la función `names()`.
+```{r nombres}
+nombres <- 
+  c(
+    "target", "cap_shape", "cap_surface", "cap_color", "bruises", "odor", 
+    "gill_attachment", "gill_spacing", "gill_size", "gill_color", "stalk_shape",
+    "stalk_root", "stalk_surface_above_ring", "stalk_surface_below_ring", 
+    "stalk_color_above_ring", "stalk_color_below_ring", "veil_type", 
+    "veil_color", "ring_number", "ring_type", "spore_print_color", "population",
+    "habitat"
+  )
+
+names(original) <- nombres
+```
+
+Nuestro resultado es el siguiente.
+
+```{r ver nombres original}
+head(original)
+```
+
+## Conversión a numérico
+Hasta aquí, todo luce bien, sin embargo, `xgboost` requiere matrices numéricas para funcionar correctamente. Tenemos que convertir nuestra columnas de datos de tipo caracter a tipo numérico.
+
+Utilizaremos las funciones `map_df()` de `purrr` para realizar esta conversión de manera eficiente.
+
+Cada columna de nuestros datos será convertida a factor con `as.factor()`, y después a número con `as.numeric()`. En R si intentamos convertir un dato de tipo caracter a numérico obtenemos únicamente `NA`s, por eso necesitamos un paso intermedio.
+
+Finalmente, restamos 1 al resultado de la conversión porque XGBoost espera valores de 0 y 1 para la variable objetivo. En nuestro ejemplo, el 1 representa un hongo venenoso y 0 un hongo que no lo es.
+
+Si no realizamos esta conversión, es probable que XGBoost devuelva resultados incorrectos.
+
+```{r convertir}
+original <- map_df(original, function(columna) {
+  columna %>% 
+    as.factor() %>% 
+    as.numeric %>% 
+    { . - 1 }
+})
+```
+
+Nuestro resultado es el siguiente.
+
+```{r}
+head(original)
+```
+
+## Creación de una lista
+Este paso tampoco es estrictamente necesario, pero a mí me resulta más fácil guardar todos los objetos relacionados con un mismo proceso en una lista. 
+
+De este modo, mi espacio de trabajo es más fácil organizar. Mientras sea consistente con la estructura de esta lista es posible reproducir o hacer ajustes a los análisis e identificar en qué paso del proceso se han presentado problemas.
+
+Creamos una lista llamada **hongo** y lo primero que haremos es guardar nuestros datos originales en ella.
+
+```{r}
+hongo <- list()
+
+hongo$original <- original
+```
+
+## Sets de entrenamiento y prueba
+Como es el caso para todos los algoritmos de predicción supervisados, necesitamos dividir nuestros datos en un conjunto de entrenamiento, que aprenderá las características de los datos y generará un modelo de predicción; y un conjunto de prueba, con el que validamos el modelo generado.
+
+Generamos nuestro set de entrenamiento con la función `sample_frac()` de `dplyr`. Extraemos una muestra aleatoria del 70% de nuestros datos originales. Utilizamos `set.seed()` para asegurar que estos resultados son replicables.
+
+```{r}
+set.seed(1919)
+hongo$train_df <- sample_frac(original, size = 0.7)
+```
+
+El resto de los datos, 30% de ellos, será el conjunto de prueba (test). 
+
+Usamos `setdiff()` para seleccionarlos.
+
+```{r}
+hongo$test_df <- setdiff(hongo$original, hongo$train_df)
+```
+
+En ambos casos, hemos guardado los resultados en nuestra lista `hongo`. 
+
+Veamos el tamaño de estos conjuntos de datos con la función `dim`.
+
+```{r size_data}
+dim(hongo$train)
+dim(hongo$test)
+```
+
+## Convertir a DMatrix
+Como ya lo mencionamos, la implementación XGBoost de R requiere que los datos que usemos sean matrices, específicamente de tipo DMatrix, así que necesitamos convertir nuestros sets de entrenamiento y prueba a este tipo de estructura.
+
+Usaremos la función `xgb.DMatrix()` de `xgboost` para la conversión. 
+
+Esta función espera una matriz numérica como primer argumento y también se pueden especificar algunos atributos adicionales al objeto que devolverá. Nosotros definiremos el atributo `label` para identificar la variable objetivo en nuestros datos.
+
+Al usar esta función es muy importante que tu `data` no incluya la columna con la variable objetivo, de lo contrario, obtendrás una precisión perfecta en tus predicciones, que será inútil con datos nuevos.
+
+Entonces, quitamos la variable objetivo de los datos usando la función `select()` de `dplyr`, convertiremos nuestros datos a matriz con `as.matrix()`, convertimos esta matriz con `xgb.Dmatrix()` y guardamos el resultado en nuestra lista `hongo`.
+
+```{r}
+hongo$train_mat <- 
+  hongo$train_df %>% 
+  select(-target) %>% 
+  as.matrix() %>% 
+  xgb.DMatrix(data = ., label = hongo$train_df$target)
+```
+
+Nuestro resultado es el siguiente.
+
+```{r}
+hongo$train_mat
+```
+
+Realizamos el mismo procedimiento con nuestro set de prueba.
+
+```{r}
+hongo$test_mat <- 
+  hongo$test_df %>% 
+  select(-target) %>% 
+  as.matrix() %>% 
+  xgb.DMatrix(data = ., label = hongo$test_df$target)
+```
+
+Obtenemos el siguiente resultado.
+
+```{r}
+hongo$test_mat
+```
+
+¡Listo! Hemos concluido la parte más laboriosa de todo el proceso. Podemos comenzar con el entrenamiento del modelo predictivo.
+
+# Entrenamiento del modelo predictivo
+Para entrenar un modelo usamos la función `xgboost()`. 
+
+Tenemos a nuestra disposición una amplia cantidad de hiper parámetros para ajustar, pero para este ejemplo introductorio haremos ajustes solo a los siguientes:
+
+* **objective**: El tipo de tarea de clasificación que realizaremos. Para clasificación binaria, nuestro caso, especificamos "binary:logistic".
+* **nround**: El número de iteraciones que se realizarán antes de detener el proceso de ajuste. Un mayor número de iteraciones generalmente devuelve mejores resultados de predicción pero necesita más tiempo de entrenamiento.
+* **max.depth**: "Profundidad" o número de nodos de bifurcación de los árboles de de decisión usados en el entrenamiento. Aunque una mayor profundidad puede devolver mejores resultados, también puede resultar en *overfitting* (sobre ajuste).
+* **eta**: La tasa de aprendizaje del modelo. Un mayor valor llega más rápidamente al mínimo de la función objetivo, es decir, a un "mejor modelo", pero puede "pasarse" de su valor óptimo. En cambio, un valor pequeño puede nunca llegar al valor óptimo de la función objetivo, incluso después de muchas iteraciones. En ambos casos, esto afecta el desempeño de nuestros modelos con nuevos.
+* **nthread**: El número de hilos computacionales que serán usados en el proceso de entrenamiento. Generalmente se refiere a los núcleos del procesador de tu equipo de cómputo, local o remoto, pero también pueden ser los núcleos de un GPU.
+
+Como los datos de nuestro ejemplo son sencillos, definiremos valores muy conservadores para todos estos hiper parámetros.
+
+Entrenamos el modelo y lo guardamos nuestro modelo en `hongo$modelo_01`. Para datos más complejos, este proceso puede ser tardado.
+
+Por defecto, nos es mostrado el resultado de la función objetivo de cada iteración. De este modo podemos analizar el desempeño del modelo que hemos especificado.
+
+```{r modelo_01}
+hongo$modelo_01 <- xgboost(data = hongo$train_mat, 
+                           objective = "binary:logistic",
+                           nrounds = 10, max.depth = 2, eta = 0.3, nthread = 2)
+```
+
+Nuestro resultado es el siguiente. Notarás que la salida incluye información de los hiper parámetros y los datos que usamos, así como un resumen de la ejecución del modelo.
+
+```{r}
+hongo$modelo_01
+```
+
+## Generación de predicciones
+El siguiente paso es utilizar la función `predict()` con el set de prueba `hongo$test_mat` para generar las predicciones de nuestro modelo `hongo$modelo_01`.
+
+Esta función espera un modelo de predicción y datos nuevos con la misma estructura que los usados para entrenar al modelo. Esto es muy importante: **si tus datos de prueba tienen una estructura diferente a los de entrenamiento, no podrás obtener predicciones**.
+
+Guardamos las predicciones en la lista `hongo`.
+
+```{r predict}
+hongo$predict_01 <- predict(hongo$modelo_01, hongo$test_mat)
+```
+
+Nuestro resultado es un vector de valores numéricos, cada uno representando la probabilidad de que un caso en particular pertenezca al valor 1 de nuestra variable objetivo. Es decir, la probabilidad de que ese hongo sea venenoso.
+
+```{r}
+head(hongo$predict_01)
+```
+
+Para este ejemplo, tomaremos las probabilidades mayores a 0.5 como una predicción de pertenencia al valor 1 de nuestra variable objetivo.
+
+```{r predict_05}
+head(hongo$predict_01 > 0.5)
+```
+
+
+# Evaluación del modelo
+Para evaluar nuestro modelo comparamos nuestras predicciones con las categorías reales de nuestro set de prueba.
+
+Para esto, usaremos la función `confusionMatrix()` de `caret` para generar un matriz de confusión.
+
+La manera más sencilla de utilizar esta función es darle como argumento un objeto de tipo `table`. 
+
+Unimos nuestras predicciones en `hongo$predict_01` y los valores reales en `hongo$test_df$target` con `cbind()` para generar un data frame con `data.frame()`, y con ella un objeto `table` con `table()`.
+
+```{r confusionMatrix}
+cbind(hongo$predict_01 > 0.5, hongo$test_df$target) %>% 
+  data.frame() %>% 
+  table() %>% 
+  confusionMatrix()
+```
+
+Nada mal. Tuvimos una precisión del 98% y sobresale que tuvimos un valor predictivo par la clase negativa, un hongo no venenoso, del 100%.
+
+Como podrás imaginar, con datos reales rara vez obtenemos resultados tan buenos con tan poco esfuerzo, pero si comparas estos resultados contra los de árboles de decisión convencionales, notarás una gran diferencia en desempeño a favor de XGBoost.
+
+Después de preparar nuestros datos, la tarea que más tiempo consume al usar este modelo es encontrar los mejores hiper parámetros para alcanzar la mayor precisión posible de un modelo.
+
+Veamos qué pasa si ajustamos nuestros hiper parámetros con un segundo modelo.
+
+# Segundo modelo.
+
+Este segundo modelo tiene un número de iteraciones mayor que el anterior, de 100 en lugar de 10, y una mayor profundidad en los árboles generados, de 2 a 4.
+
+Además, hemos ajustado el hiper parámetro `early_stopping_rounds = 10`, para que el entrenamiento se detenga si después de diez iteraciones consecutivas no se mejora el modelo. Este hiper parámetro es sumamente útil para acortar el tiempo de entrenamiento de un modelo, pues evita que el proceso continúe si ya no se obtienen mejores resultados de predicción.
+
+En este mismo bloque de código generamos una matriz de confusión para evaluar nuestro segundo modelo.
+
+```{r modelo_02}
+hongo$modelo_02 <- xgboost(data = hongo$train_mat, 
+                           objective = "binary:logistic",
+                           nrounds = 100, max.depth = 4, eta = 0.3, nthread = 2, 
+                           early_stopping_rounds = 10)
+
+
+hongo$predict_02 <- predict(hongo$modelo_02, hongo$test_mat)
+
+cbind(hongo$predict_02 > 0.5, hongo$test_df$target) %>% 
+  data.frame() %>% 
+  table() %>% 
+  confusionMatrix()
+```
+
+El entrenamiento se ha detenido después de 17 iteraciones y ha producido un modelo con una precisión del 100%. Nada mal, aunque vale la pena mencionar que podría haber sobre ajustado.
+
+# Para concluir
+
+En este artículo hemos revisado, de manera general, la implementación para **R** del algoritmo **XGBoost**. En el proceso, también dimos un vistazo al proceso para preparar datos con formatos no convencionales para ser usados en este algoritmo.
+
+Esta revisión no ha sido exhaustiva, hay algunos temas que es importante estudiar para obtener mejores resultados al usar XGBoost:
+
+* En nuestro ejemplo, tomamos los datos tal cual los obtuvimos. En la práctica, es esencial realizar una exploración mucho más profunda de los datos, por ejemplo, analizar las correlaciones entre variables, el comportamiento de datos perdidos e identificar desequilibrio en la variable objetivo.
+* Los hiper parámetros que usamos en nuestro ejemplo no son los únicos que tiene XGBoost. Conocerlos todos y entender cómo cambian el comportamiento del algoritmo te da herramientas para hacer ajustes razonados y obtener mejores resultados de predicción.
+* Sólo realizamos una tarea de clasificación binaria, pero no es la única que puede revisar XGBoost. Cada una de ellas requiere de una preparación de datos y ajuste de hiper parámetros diferente.
+
+Si quieres conocer más sobre estos temas un buen punto de partida es la documentación de XGBoost.
+
+* [XGBoost Documentation](https://xgboost.readthedocs.io/en/latest/index.html)
+
+--- 
+
+Consultas, dudas, comentarios y correcciones son bienvenidas:
+
+  *  jboscomendoza@gmail.com
+
+El código y los datos usados en este documento se encuentran en Github:
+
+  *  https://github.com/jboscomendoza/rpubs/tree/master/xgboost_en_r
