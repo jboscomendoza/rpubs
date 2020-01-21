@@ -103,3 +103,12 @@ mcu <-
 # Exportar ----
 write.csv(mcu, file = "mcu.csv", row.names = FALSE, 
           fileEncoding = "utf-8")
+
+mcu %>% 
+  mutate(is_avengers = str_detect(Pelicula, "Avengers")) %>% 
+  group_by(Year, is_avengers) %>% 
+  summarise(Taquilla = sum(Diario)) %>%
+  mutate(is_avengers = ifelse(is_avengers, "Película de Avengers", "No Avengers")) %>%
+  arrange(Year) %>% 
+  write.csv(file = "mcu_avengers.csv", row.names = FALSE, 
+            fileEncoding = "utf-8")
