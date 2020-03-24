@@ -1,0 +1,546 @@
+---
+title: "Visualizando los contagios y muertes de Coronavirus (COVID-19) con R"
+author: "Juan Bosco Mendoza Vega"
+date: "22/3/2020"
+output: 
+  html_document: 
+    fig_height: 7
+    fig_width: 9
+    highlight: haddock
+    theme: yeti
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Al momento de escribir este artículo, no encontramos en medio de una pandemia global por una nueva cepa del Coronavirus (COVID-19), para la cual no cuenta con una vacuna, que ha contagiado a decenas de miles de personas en más de ciento cincuenta países, causando una enorme pérdida de vidas humana en algunos de ellos.
+
+Esta es un problema de salud pública sumamente delicado, que ha generado una gran demanda en información sobre sus diferentes facetas por diferentes actores de la sociedad, para entender esta situación y tomar decisiones adecuadas y oportunas.
+
+Una de estas facetas es la tendencia en contagio y muertes atribuidas al Coronavirus COVID-19, en especial, su comparación entre diferentes países.
+
+Saber que de un día a otro han aparecido veinte casos de contagio nuevos es un dato difícil de interpretar si no tenemos puntos de comparación. Por ejemplo, ¿Qué tan grande es este número de contagios comparado con la tendencia mundial? ¿Son muchos, son pocos? ¿Qué tantos casos son con respecto a la población de un país? ¿Representa un número gran de o pequeño de la población? 
+
+En este artículo revisaremos una manera de visualizar los datos disponibles de contagio y fallecimientos por Coronavirus que pueden ayudar a responder estas preguntas, usando R. Al concluir este artículo, podrás generar un gráfico como el siguiente, que compara las tendencias de cuatro países diferentes.
+
+![](grafico_ejemplo.png)
+
+Este artículo asume que tienes conocimiento básico de R y del paquete `ggplot2`, que será nuestra herramienta para generar gráficos.
+
+Todo el código usado en este artículo lo podrás encontrar en GitHub:
+
+* https://github.com/jboscomendoza/visualizacion-covid-19 
+
+Comenzamos instalando los paquetes necesarios para este análisis.
+
+# Paquetes necesarios
+
+Para este análisis necesitamos los siguientes paquetes:
+
+* `tidyverse`: Un metapaquete que contine múltiples paquetes los cuales extienden las características de R. Usaremos los siguientes:
+  * `dplyr`: Manipulación de datos. En particular, usaremos mucho el operador `%>%`, que significa "toma el resultado del lado izquierdo como argumento para el lado derecho". Esto facilita realizar operaciones en secuencia, presentándolas de una manera clara, que es sencilla de modificar.
+  * `readr`: Lectura y escritura de archivos.
+  * `tidyr`: Funciones para limpiar y uniformar datos.
+  * `stringr`: Procesamiento de cadenas de texto.
+  * `purr`: Programación funcional en R, en particlar, herramentas para trabajar con listas.
+  * `ggplot2`: Creación de gráficos y visualizaciones de información.
+* `readxl`: Lectura de documentos de Microsoft Excel (xls y xlsx).
+* `lubridate`: Herramientas para trabajar con fechas.
+* `janitor`: Limpieza de nombres de variables.
+* `scales`: Herramientas para dar formato a datos.
+* `RColorBrewer`: Creación de paletas de colores.
+
+Si no tienes instalados estos paquetes, puedes instalarlos con la función `install.packages()`.
+
+```{r instalar_paquetes, eval=FALSE}
+install.packages(
+  c("tidyverse", "lubridate", "janitor", "readxl", "scales", "RColorBrewer")
+)
+```
+
+Una vez que hemos instalado estos paquetes, los cargamos a nuestro espacio de trabajo con `library()`
+
+```{r paquetes, message=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(janitor)
+library(scales)
+library(RColorBrewer)
+```
+
+Nuestro siguiente paso es crear algunas variables auxiliares que nos serán de utilidad más adelante.
+
+# Variables auxiliares
+
+Como nuestro objetivo es visualizar tendencias, creamos un par de variables con fechas de referencia.
+
+La primera será la fecha actual, que al momento de realizar el análisis es 2020-03-22, que asignamos en la variable `hoy`.
+
+```{r variable_hoy}
+hoy <- format(Sys.time(), "%Y-%m-%d")
+```
+
+Nuestro resultado.
+
+```{r}
+hoy
+```
+
+También creamos una variable con un data frame de todas las fechas del 2020, desde el primero de enero hasta el día de hoy. Esta nos ayudará a asegurar que tenemos secuencias de días completos en nuestros datos.
+
+Usamos la función `seq.Date()` en conjunto con la función `ymd()` de `lubridate` para generar una secuencia de fechas desde el primero de enero de 2020 hasta el día de hoy. 
+
+Guardamos el resultado en el objeto llamado `fechas_2020`, creado con la función `tibble()` de `dplyr()`
+
+```{r df_fechas}
+fechas_2020 <-  
+  tibble(
+    fecha = seq.Date(from = ymd("2020-01-01"), to = ymd(hoy), by = "1 day")
+  )
+```
+
+El siguiente paso es descargar los datos que de contagio y de población.
+
+# Descarga de datos
+
+## Contagios y muertes COVID-19
+Necesitamos datos del número de personas contagiadas de Coronavirus y que han fallecido a causa de este.
+
+Existen diferentes fuentes de información para obtener estos datos, distribuidas por organizaciones públicas y privadas, con distintas características y distribuidos en diferentes formatos.
+
+Usaremos los datos del Centro Europeo para la Prevención y Control de Enfermedades (ECDPC, European Centre for Disease Prevention and Control). 
+
+Este conjunto de datos se actualiza diariamente y lleva un registro de contagios y muertes de todo el mundo, identificados por fecha y región.
+
+Los datos se encuentran en la siguiente página.
+
+* [Download today’s data on the geographic distribution of COVID-19 cases worldwide](https://www.ecdc.europa.eu/en/publications-data/download-todays-data-geographic-distribution-covid-19-cases-worldwide)
+
+Los descargaremos usando la función `download.file()`, pero antes debemos crear el enlace para los datos del día de hoy, pues cambia diariamente. Usando como referencia la información de la página, generamos un enlace de la siguiente manera, con la función `paste0()`.
+
+```{r rutas_covid}
+url_covid <- 
+  paste0(
+    "https://www.ecdc.europa.eu/sites/default/files/documents/COVID-19-geographic-disbtribution-worldwide-", 
+    hoy,  ".xlsx"
+    )
+```
+
+También creamos una ruta para el archivo local en el que guardaremos los datos.
+
+```{r archivo_covid}
+archivo_covid <- paste0(hoy, "_covid19.xlsx")
+```
+
+Ya definidas estas variables, descargamos los datos usando `download.file()` con el argumento `mode = "wb"` para evitar problemas al leer el documento ontenido. 
+El archivo es un documento de Microsoft Excel, que será guardado en nuestra carpeta de trabajo.
+
+```{r dwn_covid, eval=FALSE}
+download.file(
+  url = url_covid, 
+  destfile = archivo_covid, 
+  mode = "wb"
+  )
+```
+
+El siguiente paso es obtener los datos de población de los diferentes países del mundo.
+
+## Población 
+
+Los datos de población nos permitirán obtener un valor relativo de los contagios y muertes, es decir, qué proporción de los habitantes de un país representan.
+
+Usaremos los datos del *Population Reference Bureau*, que corresponden a la población de mediados del 2019, que para nuestros fines es una dato aceptable. Esta información se encuentra en la siguiente página.
+
+* [Population mid-2019](https://www.prb.org/international/indicator/population/map/country)
+
+Descargamos los datos al archivo `poblacion.csv` en nuestra carpeta de trabajo.
+
+```{r dwn_poblacion, eval=FALSE}
+download.file(
+  url = "https://datacenter.prb.org/download/international/indicator/population/2019/csv", 
+  destfile = "poblacion.csv", 
+  mode = "wb"
+)
+```
+
+Ya tenemos los datos, ahora necesitamos leerlo y procesarlos a un formato apropiado para nuestros fines.
+
+# Lectura y procesamiento de datos
+
+## Coronavirus
+
+Comenzamos leyendo los primeros diez renglones de nuestros datos sobre Coronavirus para conocer su estructura.
+
+```{r}
+read_excel(archivo_covid, n_max = 10) 
+```
+
+Parece que no será necesario realizar un procesamiento adicional para leer correctamente los datos. Solo debemos cambiar el nombre de las columnas para evitar errores en el código y para hacerlas más descriptivas.
+
+Los datos que hemos obtenido nos indican los casos y muertes nuevas por día atribuídas al Corona Virus, así que tendremos que calcular el total acumulado a través del tiempo nosotros mismos.
+
+Importamos todos los datos y hacemos los cambios de nombre con la función `select()` de `dplyr` y damos formato de fecha a la columna *fecha* usando la función `ymd()` de `lubridate`. Asignamos los resultados a la variable `data_covid`.
+
+```{r}
+data_covid  <- 
+  archivo_covid %>% 
+  read_excel() %>%
+    select(
+    "fecha" = DateRep,
+    "casos_nuevos" = Cases,
+    "muertes_nuevas" = Deaths,
+    "region" = `Countries and territories`,
+    "geo_id" = GeoId
+  ) %>% 
+  mutate_at("fecha", ymd)
+```
+
+Lo que sigue es la parte más compleja del procesamiento. Vamos a realizar lo siguiente, en orden.
+
+* Agrupamos los datos por *geo_id* con `group_by()`  de `dplyr`.
+* Ordenamos los renglones por *fecha* con `arrange()` de `dplyr`. De este modo ordenamos los renglones de cada país de manera separada.
+* Desagrupamos los datos con `ungroup()` de `dplyr`.
+* Dividimos nuestro data frame por *geo_id* con `split()`. Nuestro resultado será una lista de data frames, uno por región.
+* Usamos `map_df()` de `purrr` para realizar transformaciones a cada data frame de nuestra lista, de manera separada. Usamos `map_df()` en region de `map()` para obtener como resultado un data frame, formado por todos los data frames de cada región. Las transformaciones que hacemos son:
+  * Unimos los datos por región con nuestra variable `fechas_2020` usando `right_join()` de `dplyr`, para asegurarnos que no hay datos faltantes de ningún día del año. Para algunas regiones, se han guardado datos sólo para los días con información nueva, así que hay vacios en fechas consecutivas.
+  * Con `fill()` de `tidyr()` rellenamos datos hacia abajo en las columnas *region* y *geo_id*, que quedaron vacios al hacer la unión anterior.
+  * Quitamos con  `filter()` de `dplyr()` los renglones sin datos de *geo_id*. Estos son renglones de fechas antes de la detección del primer caso de Coronavirus en una region.
+  * Con `mutate()` de `dplyr`, rellenamos con `0` los renglones que no tuvieron datos nuevos de contagio o muertes, las columnas *casos_nuevos* y *muertes_nuevas* usando `ifelse()`.
+  * Usamos `mutate()` nuevamente junto con `cumsum()` para obtener el acumulado de casos y muertes, que asignamos a las columnas *casos_acumulados* y *muertes_acumuladas*.
+  * Con `filter()` nos quedamos únicamente con renglones que tienen más de `0` casos acumulados. De este modo nos aseguramos de tener únicamente datos después del primer caso de contagio de Coronavirus detectado.
+  * Finalmente, con otro `mutate()` y `row_number()` de `dplyr`, creamos la columa *dia*, que es conteo de días desde el primer caso de contagio, hasta el día de hoy.
+
+Todo lo anterior lo realizamos con el siguiente bloque de código y asignamos su resultado a la variable `data_covid`
+
+```{r lectura_covid}
+data_covid <- 
+  data_covid %>% 
+  group_by(geo_id) %>% 
+  arrange(fecha, .by_group = TRUE) %>% 
+  ungroup() %>% 
+  split(., .$geo_id) %>% 
+  map_df(
+    ~right_join(., fechas_2020, by = "fecha") %>% 
+      fill(region, geo_id, .direction = "down") %>% 
+      filter(!is.na(geo_id)) %>% 
+      mutate_at(c("casos_nuevos", "muertes_nuevas"), ~ifelse(is.na(.), 0, .)) %>% 
+      mutate(
+        casos_acumulados = cumsum(casos_nuevos),
+        muertes_acumuladas = cumsum(muertes_nuevas)
+      ) %>% 
+      filter(casos_acumulados > 0) %>% 
+      mutate(dia = row_number())
+  )
+```
+
+
+Nuestro resultado.
+
+```{r}
+data_covid
+```
+
+Ahora toca leer y procesar los datos de población.
+
+## Población 
+
+Leemos los primeros diez renglones de nuestros datos de población del archivo *poblacion.csv*. Vamos a usar `read_lines()` de `readr` para ilustrar un aspecto importante del procesamiento de datos.
+
+```{r lectura_inicial}
+read_lines("poblacion.csv", n_max = 10)
+```
+
+Al leer de esta manera el archivo, nos damos cuenta que tenemos renglones de encabezado que necesitamos omitir. Después de ese encabezado se encuentran los datos que necesitamos con un formato bastante limpio que no requiere mayor procesamiento.
+
+Sin embargo, si intentas leer directamente con  `read_csv()` de `readr`, el resultado es el siguiente.
+
+```{r}
+read_csv("poblacion.csv", n_max = 10)
+```
+
+Si no te tomas el tiempo de explorar directamente tus datos, encontrar la razón por la que estás obteniendo esta salida puede ser sumamente difícil. Por esto es importante inspeccionar tus archivos, aunque tengan una extensión que, tradicionalmente, es fácil procesar y que en teoría no debería generar problemas.
+
+Dicho esto, todo lo que tenemos que hacer es agregar el argumento `skip = 3` a `read_csv()` para omitir el encabezado.
+
+Después de eso, realizaremos el siguiente procesamiento.
+
+ * Usamos `select()` para cambiar los nombres de las columnas. La columna *Data* contiene la información de población, expresada en millones de personas, por eso la renombramos como *pob_mill*. La columna *FIPS* es renombrada a  *geo_id* para poder unir estos datos con los que tenemos de Coronavirus.
+ * Con  `filter()` elegimos los renglones que coincidan con *tipo* igual a **"Country"**, es decir, países y no continentes u otras regiones geográficas.
+ * Nos quedamos sólamente con las columnas *geo_id* y *pob_mill*.
+ * Usamos `mutate()` para crear la columna *pob_raw*, que la población expresada en miles de personas. Esto nos servirá más adelante, al visualizar los datos.
+ 
+Todo lo anterior lo realizamos con el siguiente bloque de código y lo asignamos a la variable `data_poblacion`.
+
+```{r data_poblacion}
+data_poblacion <- 
+  read_csv("poblacion.csv", skip = 3) %>% 
+  select(
+    "geo_id" = FIPS,
+    "nombre" = Name, 
+    "tipo" = Type, 
+    "periodo" = TimeFrame, 
+    "pob_mill" = Data
+    ) %>% 
+  filter(tipo == "Country") %>% 
+  select(geo_id, pob_mill) %>% 
+  mutate(pob_raw = pob_mill * 10 ^ 3) 
+```
+
+Es momento de unir los datos de Coronavirus con los de población.
+
+## Datos combinados
+
+Dado que tenemos una columna *geo_id* en nuestros dos conjuntos de datos, la unión es muy sencilla usando la función `inner_join()` de `dplyr`. Guardamos el resultado en la variable `datos_combinados`.
+
+```{r data_combinados}
+data_combinados <- 
+  inner_join(data_covid, data_poblacion, by = "geo_id")
+```
+
+Nuestro resultado es el siguiente.
+
+```{r}
+data_combinados
+```
+
+Hasta aquí todo va bien, pero necesitamos transformar nuestros datos para poder visualizarlos más fácilmente con `ggplot2`.
+
+Haremos lo siguiente.
+
+* Con `mutate()` creamos la proporción de contagios y muertes por mil habitantes, dividiendo entre la variable *pob_raw*. Obtenemos las columnas *casos_por_mil_habitantes* y *muertes_por_mil_habitantes*.
+* Transformamos nuestros datos de una forma ancha (wide) a una larga (long) con la función `pivot_longer()` de `tidyr`. Con esta función transformamos múltiples columnas en dos, una con una etiqueta, el nombre de la columna original, y otra con un dato, lo que contenía la columna. Crearemos las columnas *tipo* y *valor*.
+* Con `mutate_at()` de `dplyr` cambiamos el contenido de las columnas *tipo* y *region*. La función `toTitleCase` de  `tools` (incluida con la instalación estándar de R) cambia la primera letra de cada palabra a mayúscula y la función  `str_replace_all()` de `stringr` para cambiar los guiones bajos (_) a espacios.
+
+Realizamos lo anterior con el siguiente bloque de código y lo asignamos al objeto `data_combinados`.
+
+```{r data_combinados_proc}
+data_combinados <- 
+  data_combinados %>% 
+  mutate(
+    casos_por_mil_habitantes = casos_acumulados / pob_raw,
+    muertes_por_mil_habitantes = muertes_acumuladas / pob_raw
+  ) %>% 
+  pivot_longer(
+    cols = c("casos_nuevos", "muertes_nuevas", 
+             "casos_acumulados", "muertes_acumuladas", 
+             "casos_por_mil_habitantes", "muertes_por_mil_habitantes"), 
+    names_to = "tipo", values_to = "valor"
+  ) %>% 
+  mutate_at(c("tipo", "region"), 
+            ~tools::toTitleCase(.) %>% 
+              str_replace_all("_", " "))
+```
+
+Ya casi estamos listos para visualizar nuestros datos, pero antes necesitamos otra variable.
+
+## Cantidad de días desde el primer contagio
+
+Para visualizar nuestros datos, necesitamos definir cuál el núero de días que han ocurrido desde el primero contagio hasta hoy, un dato que cambiará dependiendo del país que elijamos para nuestro análisis.
+
+Algunos países han tenido casos desde el inicio desde 2019 e inicio de 2020, mientras que otros tienen apenas días desde el primer caso. En mi caso, me interesan los datos de México, que es donde vivo, así que extraere el dato para ese país.
+
+Usamos `filter()` para obtener el renglón con los datos de México (*MX*) para `hoy`, nos quedamos con el primer renglón de estos datos con `head()` y usamos `pull()` de `dplyr()` para obtener el valor de *dia* como un vector numérico.
+
+```{r dia_hoy}
+dia_hoy <- 
+  data_combinados %>% 
+  filter(geo_id == "MX" & fecha == hoy) %>% 
+  head(1) %>% 
+  pull(dia)
+```
+
+Nuestro resultado.
+
+```{r}
+dia_hoy
+```
+
+Nuestro siguiente paso es la visualización
+
+# Visualización de datos
+
+Como mencionamos en la introducción de este artículo, asumimos que tienes un dominio básico de `ggplot2`, es decir, que por lo menos puedes crear un gráfico usando la función `ggplot()`, agregar dimensiones con `aes()` y agregar elementos gráficos con `geom()`.
+
+Dicho esto, empezamos creando un tema de `ggplot2` para darle una mejor presentación a nuestros gráficos.
+
+Nuestro tema toma como base el tema *minimal* incluido  en `ggplot2`, quita las líneas de referencia menores en los páneles de ambos ejes y las líneas de referencia mayores para el eje x. Además, agrega un color de fondo para los títulos de facets.
+
+Guardamos este tema en la variable `tema_plot` y lo agregaremos con `+` una vez que hemos definido los elementos de nuestros gráficos.
+
+```{r tema_plot}
+tema_plot <- 
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x =  element_blank(),
+    strip.background = element_rect(fill = "#eeeeee", color = NA) 
+  ) 
+```
+
+Ahora sí, a crear gráficos.
+
+## Casos y muertes por Coronavirus, por fecha
+
+Para este gráfico, comenzamos filtrando nuestros datos para incluir únicamente un conjunto de paises de nuestro interés con `filter()`. Tomaremos los datos de México (*MX*), China (*CN*), Italia (*IT*) y Estados Unidos de América (*US*), por ser países con tendencias bastante interesantes.
+
+Con este conjunto de datos, crearemos un gráfico que tendrá los siguientes elementos.
+
+* `aes`con *fecha* en el eje X, *valor* en el eje Y, y *region* como el color de los elementos.
+* `geom_line` para generar un gráfico de líneas, con `size = .7` para que estas tengan un grosor visible.
+* `scale_x_date` para mostrar el eje X con formato de fecha y `date_labels = "%B"` para que las divisiones estén marcadas con el nombre del mes al que corresponden.
+* `scale_y_continuous` con `expand = c(0, 0)` para quitar espacio en blanco en las partes inferior y superior del eje Y y `labels = comma_format())`, una función de `scales`, para mostrar los números de este eje con formato de coma.
+* `scale_color_manual` con `name = "region"` para darle un título apropiado a la leyenda del gráfico y  `values = brewer.pal(4, "Spectral"))`, una función de `RColorBrewer`, para elegir una paleta de colores muy vivos y hacer más legible el gráfico.
+* `facet_wrap`, que creará facets para cada valor en la columan *tipo* y con `scales = "free_y"`, para que el eje Y de cada facet tenga su propio mínimo y máximo.
+*  `labs` para asignar nombres al eje X y el eje Y.
+* Nuestro `tema_plot`.
+* `theme` con `legend.position = "top"`, para ubicar la leyenda del gráfico en la parte superior.
+
+Parece mucho, pero no es tan complejo cuando entiendes la lógica de la visualización... Aunque estoy haciendo trampa al mostrarte el resultado de múchas iteraciones para llegar a estos gráficos, en las que probé múltiples combinaciones de elementos y ajustes. 
+
+Crear gráficos es una tarea muy laboriosa, no tanto porque el código sea complejo (que puede serlo) sino porque llegar al gráfico que quieres requiere de paciencia y de equivocarte muchas, muchas veces.
+
+En fin. Nuestro resultado es el siguiente.
+
+```{r}
+data_combinados %>% 
+  filter(geo_id %in% c("MX", "CN", "IT", "US")) %>% 
+  ggplot() +
+  aes(x = fecha, y = valor, color = region) +
+  geom_line(size = 0.7) +
+  scale_x_date(date_labels = "%B") + 
+  scale_y_continuous(expand = c(0, 0), labels = comma_format()) +
+  scale_color_manual(name = "País", values = brewer.pal(4, "Spectral")) +
+  facet_wrap("tipo", scales = "free_y") +
+  labs(x = "Fecha", y = "Conteo") +
+  tema_plot +
+  theme(legend.position = "top") 
+```
+
+Podemos observar que mientras que China había logrado controlar la parte más grave de la pandemia de Coronavirus, Italia y Estados Unidos apenas empezaban a sentir su impacto. Y, por el momento, México aún no tiene un número comparable de casos, comparado con estos países.
+
+Ahora generaremos un gráfico que muestre esta misma tendencia, pero teniendo como referencia los días desde el primer contagio en cada país.
+
+## Casos y muertes por Coronavirus, por día desde el primer contagio detectado
+
+Los elementos de este gráfico son los mismo que el anterior, incluido el filtrado inicial de datos, pero con las siguientes diferencias:
+
+* `aes` con dia en el eje X.
+* `geom_vline` con `xintercept = dia_hoy`, para crear una línea vertical que indica el día en que se encuentra México, desde el primer contagio identificado. Esta línea será roja, `color = "red"`, y punteada `lty = 2`.
+* `labs` con un nombre apropiado para este gráfico.
+
+Nuestro resultado es el siguiente.
+
+```{r}
+data_combinados %>% 
+  filter(geo_id %in% c("MX", "CN", "IT", "US")) %>%
+  ggplot() +
+  aes(dia, valor, color = region) +
+  geom_line(size = 0.7) +
+  geom_vline(xintercept = dia_hoy, color = "red", lty = 2) +
+  scale_x_continuous(breaks = seq(0, 100, by = 15)) + 
+  scale_y_continuous(expand = c(0, 0), labels = comma_format()) +
+  scale_color_manual(name = "País", values = brewer.pal(4, "Spectral")) +
+  facet_wrap("tipo", scales = "free") +
+  labs(x = "Días desde el primer caso", y = "Conteo") +
+  tema_plot + 
+  theme(legend.position = "top") 
+```
+
+Podemos observar que cada país ha tenido una tendencia diferente en cuanto a contagios y muertes, desde el primer caso detectado. Este gráfico también ayuda a dimensionar lo grave de la situación en Italia y que México apenas estaría entrando al momento de mayor crecimiento de casos de Coronavirus.
+
+Para terminar, crearemos un par de gráficos más.
+
+## Casos y muertes por Coronavirus, por fecha, un país vs el resto del mundo
+
+Este gráfico resaltará la tendencia de un país, en rojo, comparado con la tendencia de todos los países del mundo, al mismo tiempo, en negro. 
+
+Resaltaremos la tendencia de Italia (*IT*), pues creo que ayudará a observar la magnitud de la pandemia en ese país.
+
+Los cambios que haremos, con respecto al primer gráfico que generamos, son los siguientes:
+
+* Reemplazamos el filtro de país por un `mutate()` con un `ifelse()`, que crea una columna llamada resaltado, marcando como `TRUE` el país de interés y `FALSE` todos los demás.
+* `aes` con `color = resaltado`.
+* `geom_line` con `alpha = .3`, para hacer semitransparentes la líneas del gráfico.
+* `scale_color_manual` con `values = c("black", "red")`, para colorer de rojo los datos de nuestro país de interés y negro el resto.
+
+Nuestro resultado es el siguiente:
+
+```{r}
+data_combinados %>% 
+  mutate(resaltado = ifelse(geo_id == "IT", TRUE, FALSE)) %>% 
+  ggplot() +
+  aes(fecha, valor, group = region, color = resaltado) +
+  geom_line(size = 0.7, alpha = .3) +
+  scale_x_date(date_labels = "%B") + 
+  scale_y_continuous(expand = c(0, 0), labels = comma_format()) +
+  scale_color_manual(name = "region", values = c("black", "red")) +
+  facet_wrap("tipo", scales = "free") +
+  labs(x = "Fecha", y = "Conteo") +
+  tema_plot +
+  theme(legend.position = "none") 
+```
+
+Con este gráfico creo que no queda duda que Italia ha sido un caso excepcional en esta crisis de salud pública.
+
+Terminemos con un gráfico más.
+
+## Casos y muertes por Coronavirus, por día desde el primer contagio detectado, un país vs el resto del mundo
+
+Los cambios que haremos, con respecto al gráfico anterior son los siguientes:
+
+* `aes` con dia en el eje X.
+* `geom_vline` con `xintercept = dia_hoy`, para crear una línea vertical que indica el día en que se encuentra México, desde el primer contagio identificado. Esta línea será roja, `color = "red"`, y punteada `lty = 2`.
+* `labs` con un nombre apropiado para este gráfico.
+
+Nuestro resultado es el siguiente.
+
+```{r}
+data_combinados %>% 
+  mutate(resaltado = ifelse(geo_id == "IT", TRUE, FALSE)) %>% 
+  ggplot() +
+  aes(dia, valor, group = region, color = resaltado) +
+  geom_line(size = 0.7, alpha = .25) +
+  geom_vline(xintercept = dia_hoy, color = "red", lty = 2) +
+  scale_x_continuous(breaks = seq(0, 100, by = 15)) + 
+  scale_y_continuous(expand = c(0, 0), labels = comma_format()) +
+  scale_color_manual(name = "region", values = c("black", "red")) +
+  facet_wrap("tipo", scales = "free_y") +
+  labs(x = "Días desde el primer caso", y = "Conteo") +
+  tema_plot +
+  theme(legend.position = "none") 
+```
+
+Este gráfico nos muestra que Italia no mostró un crecimiento inmediato de contagios y muertes por Coronavirus, pero en cuanto empezaron a ocurir, crecieron de manera descontrolada.
+
+He dejado la línea vertical que hace referencia a México, que creo que ilustra que, aunque actualmente la situación es estable en mi país, eso puede cambiar drásticamente si se toman las cosas a la ligera.
+
+
+# Para concluir
+
+En este artículo revisamos una manera de visualizar información que puede resultar relevante para comprender un problema complejo, como lo es la pandemia actual de Coronavirus COVID-19. 
+
+Vimos la manera de descargar, leer, procesar y combinar datos, así como la generación de gráficos más o menos complejos.
+
+No nos detuvimos mucho en el análisis de los resultados obtenidos del análisis, pues esto requiere de un conocimiento disciplinar específico, por ejemplo en epidemiología o salud pública, que no poseo. Sin embargo, creo que es posible contextualizar mejor la situación actual al tener más puntos de referencia.
+
+Los datos que hemos usado y los gráficos que hemos generado pueden usarse para realizar análisis diferentes, lo cual podría resultar en insights interesantes.
+
+Y, desde luego, ante una situación como esta pandemia, lo mejor que podemos hacer es cuidarnos y cuidar de los demás.
+
+--- 
+
+
+El código de este artículo se encuentra disponible en GitHub:
+  
+  * https://github.com/jboscomendoza/visualizacion-covid-19
+
+Consultas, dudas, comentarios y correcciones son bienvenidas:
+
+  * jboscomendoza@gmail.com
+
+El código y los datos usados en este documento se encuentran en Github:
+
+  * https://github.com/jboscomendoza/rpubs/tree/master/xgboost_en_r
+
