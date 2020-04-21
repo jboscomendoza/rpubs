@@ -1,13 +1,13 @@
 body {
-    font-family: Calibri, serif;
+    font-family: Segoe UI, sans-serif;
     background-color: #d9d9d9;
 }
 
 H2 {
     font-weight: bold;
     padding-bottom: 10px;
-    margin: 20px 0px 10px 30px;
-    border-bottom: 1px solid black;
+    margin: 20px 0px 20px 30px;
+    border-bottom: 1px solid #aaa;
 }
 
 a {
@@ -18,6 +18,9 @@ a:hover {
     color: #bb4481;
 }
 
+.container-fluid {
+    max-width: 1280px;
+}
 
 .well {
     background-color: #d9d9d9;
@@ -26,3 +29,16 @@ a:hover {
     box-shadow: none;
 }
 
+.footer {
+    font-size: 11px;
+    min-width: 97%;
+    max-width: 97%;
+    padding-top: 10px;
+    margin: 20px 0px 10px 30px;
+    display: inline-block;
+    border-top: 1px solid #aaa;
+}
+
+.footer p {
+    margin: 0px;
+}
