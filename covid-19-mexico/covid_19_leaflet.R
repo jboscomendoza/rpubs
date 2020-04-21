@@ -2,6 +2,7 @@ library(shiny)
 library(readr)
 library(leaflet)
 
+data_mapa <- read_rds("para_mapa.rds")
 
 ui <- fluidPage(
   includeCSS("styles.css"),
@@ -19,6 +20,13 @@ ui <- fluidPage(
       c("Total" = "N",
         "Por 1,000 habitantes"  = "PROP")
     ),
+    
+    selectInput(
+      inputId = "entidad", "Filtrar por entidad",
+      c("Todas", unique(para_mapa$NOM_ENT))
+    ),
+    
+    
     br(),
     p("Fuente:",
       tags$br(),
@@ -34,13 +42,15 @@ ui <- fluidPage(
 
 
 server <- function(input, output) {
-  data_mapa <- read_rds("para_mapa.rds")
   
   mapa <- renderLeaflet({
     valor_label <-  input$relacion
     valor_radius <- paste0("ESCALA_", input$relacion)
     
     para_mapa <- data_mapa[data_mapa[["VARIABLE"]] == input$tipo, ]
+    if(input$entidad != "Todas") {
+      para_mapa <- para_mapa[para_mapa[["NOM_ENT"]] == input$entidad, ]
+    }
     
     leaflet(para_mapa) %>% 
       addProviderTiles(providers$Stamen.TonerLite) %>% 

@@ -17,7 +17,7 @@ para_mapa <-
     .
   } %>% 
   map2_df(
-    c(as.character(unique(covid_loc$RESULTADO)), "Todos los análisis"), 
+    c(names(.)[-4], "Todos los análisis"), 
     function(tabla, tipo) {
       pob <-  tabla %>% 
         select(ENTIDAD_RES, MUNICIPIO_RES, POB_TOTAL) %>% 
