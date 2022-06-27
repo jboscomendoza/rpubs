@@ -1,0 +1,44 @@
+---
+title: "Teoría clásica de los test (CTT) - Psicometría con R"
+author: "Juan Bosco Mendoza Vega"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Una introducción informal a la Teoría Clásica de los Test
+
+La Teoría Clásica de los Test (Classical Test Theory, CTT) es un marco de referencia usado en psicometría para analizar e interpretar los resultados de un instrumento.
+
+La CTT es un marco de referencia con una larga historia, pero también tiene limitaciones importantes para el análisis y la interpretación de resultados.
+
+La CTT tiene como supuesto principal que los resultados obtenidos de un instrumento psicométrico son igual a la medida verdadera de un rasgo, más el error de medición.
+
+$X = T + e$
+
+Donde:
+
+* X = Puntaje observado.
+* T = Medida o puntaje verdadero de una variable latente.
+* e = Error de medición.
+
+
+La CTT tiene además tres supuestos que se relacionan con el error de medición.
+
+1. El puntaje de cada ítem no es afectado por el error, siempre que se tenga una muestra suficientemente grande. 
+2. El error de un ítem no tiene correlación con el error de un ítem distinto. 
+3. El error no se correlaciona con el puntaje verdadero de una variable latente.
+
+La principal ventaja de la CTT es que sus indicadores psicométricos son fáciles de calcular e interpretar, lo cuál es conveniente sobre todo al momento de comunicar resultados a un público no especializado.
+
+Sin embargo, este marco de referencia tiene  las siguientes limitantes:
+
+* Se enfoca en el instrumento, no en los reactivos. El instrumento es la unidad de análisis, por lo que si el instrumento se modifica, de cualquier manera, es necesario realizar de nuevo el análisis e interpretación de resultados.
+* Los puntajes de los ítems dependen de la muestra, por lo tanto el puntaje de los instrumentos también. 
+* Pör lo tanto, los indicadores psicométricos de una instrumento y las personas que lo han contestado son inseparables. En consecuencia...
+* Se tiene medida de confiabilidad única para todo un instrumento, todos los reactivos y todos los respondentes.
+
+
