@@ -2,7 +2,10 @@
 title: "Teoría clásica de los test (CTT) - Psicometría con R"
 author: "Juan Bosco Mendoza Vega"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  html_document: 
+    highlight: tango
+    theme: paper
 ---
 
 ```{r setup, include=FALSE}
@@ -41,4 +44,105 @@ Sin embargo, este marco de referencia tiene  las siguientes limitantes:
 * Pör lo tanto, los indicadores psicométricos de una instrumento y las personas que lo han contestado son inseparables. En consecuencia...
 * Se tiene medida de confiabilidad única para todo un instrumento, todos los reactivos y todos los respondentes.
 
+
+# CTT con R
+
+R cuenta con distintos paquetes que nos permiten realizar análisis de CTT de manera bastante sencilla.
+
+En particular usaremos dos paquetes para este análisis:
+
+* **CTT**: Diseñado específicamente para Teoría Clásica de los Tests.
+* **psych**: Paquete con funciones para análisis psicométrico.
+* **dplyr**: Paquete diseñado para facilitar la manipulación de datos, parte del meta paquete
+`tidyverse`.
+
+Instalamos estos paquetes con la función `install.packages()`.
+
+```{r, eval=FALSE}
+install.packages(c("CTT", "psych", "dplyr"))
+```
+
+
+Cargamos estos paquetes a nuestro entorno de trabajo con la función `library()` para tenerlos listos para usar.
+
+```{r}
+library(CTT)
+library(psych)
+library(dplyr)
+```
+
+# Datos que usaremos
+
+Usaremos un conjunto de datos extraído de los resultados de una evaluación nacional de aprendizaje de estudiantes de México. Específicamente, un subconjunto de los datos la evaluación PLANEA de Matemáticas de Sexto de Primaria, correspondiente a la aplicación del 2018.
+
+De nuevo, usaremos los datos de sexto, leídos como lo revisamos en sesiones anteriores
+
+```{r, warning=FALSE, message=FALSE}
+matematicas <- read.csv("matematicas.csv")
+```
+
+
+```{r}
+head(matematicas)
+```
+
+Para trabajar con CTT, cada renglón debe representar a una persona y cada columna a un ítem o reactivo al que han contestado. En este caso, tenemos 1314 personas y 25 reactivos (PMA_1 a PMA_25).
+
+## Usando score() con datos codificados
+
+Si nuestros datos ya se encuentran codificados como 0 = incorrecto y 1 = correcto, podemos usar la función `score()`  de `CTT` para obtener los puntajes de cada persona, dando como único argumento nuestro data frame `matematicas`y asignamos los resultados al objeto `matematicas_score`.
+
+```{r}
+matematicas_score <- score(matematicas)
+```
+
+Se nos muestra un mensaje, informando que se asumido que los datos ya han sido codificados. ("No key provided, assuming pre-scored data.")
+
+Nuestro resultado será el puntaje para cada una de las personas. 
+
+
+Por ejemplo, veamos los primeros diez resultados.
+```{r}
+matematicas_score$score[1:10]
+```
+
+Este es un resultado bastante sencillo, corresponde a la suma de aciertos (1) de cada persona.
+
+
+# Análisis de reactivos
+
+Para analizar los reactivos, usamos la función `itemAnalysis()`.
+
+Damos como argumento nuestro patrón de respuesta, además de indicar que serán marcados los ítems con dificultad igual o menor a .25 (`hardFlag`) y con una correlación punto biserial o discriminación menor a 0.2 (`pBisFlag`). Volveremos a la explicación de estos valores más adelante.
+
+y asignamos el resultado al objeto `matematicas_ctt`.
+
+```{r}
+matematicas_ctt <- itemAnalysis(matematicas, hardFlag=.25, pBisFlag=.2)
+```
+Si llamamos al objeto **matematicas_ctt** se nos muestra el resumen del análisis, que incluye el valor del coeficiente Alpha de Cronbach, usado para evaluar confiabilidad.
+
+```{r}
+matematicas_ctt
+```
+
+Comprobamos que el resumen de ítems y personas (examinees) corresponde con nuestros datos:
+
+* 25 reactivos.
+* 1314 estudiantes con respuestas.
+* Un alpha de 0.852, que es un valor bueno.
+
+Para obtener el análisis detallado de los reactivos, extraemos el componente `$itemReport` del objeto **matematicas_ctt**.
+
+Lo asignamos al objeto **matematicas_ctt_report** para usarlo más fácilmente.
+
+```{r}
+matematicas_ctt_report <- matematicas_ctt$itemReport
+```
+
+El contenido de este objeto es una matriz, que podemos convertir a un data frame si lo deseamos.
+
+```{r}
+matematicas_ctt_report
+```
 
