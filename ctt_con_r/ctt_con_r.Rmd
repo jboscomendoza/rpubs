@@ -40,7 +40,7 @@ La CTT tiene tres supuestos, relacionados con el error de medición.
 
 Se asume que el error de medida es aleatorio y que se distribuye normalmente. 
 
-Para fines prácticos, lo anterior nos dice que mientras construyamos un instrumentos psicométrico de manera apropiada, sus resultados no deberían presentar sesgo estadístico.
+Para fines prácticos, lo anterior nos dice que mientras construyamos un instrumentos psicométricos de manera apropiada, sus resultados no deberían presentar sesgo estadístico.
 
 Los siguientes artículos son un buen punto de partida si deseas profundizar sobre los aspectos teóricos de CTT.
 
@@ -58,13 +58,13 @@ Esto último suele ser útil para comunicar resultados a un público no especial
 Este marco de referencia tiene las siguientes limitaciones.
 
 * Se enfoca en el instrumento, no en los reactivos. El instrumento es la unidad de análisis, si el instrumento se modifica de cualquier manera, es necesario realizar de nuevo el análisis e interpretación de resultados.
-* Los puntajes de los ítems dependen de la muestra, por lo tanto el puntaje de los instrumentos también lo hará. En consecuencia, los indicadores psicométricos de una instrumento y las personas que lo han contestado son inseparables.
+* Los puntajes de los ítems dependen de la muestra, por lo tanto, el puntaje de los instrumentos también lo hará. En consecuencia, los indicadores psicométricos de un instrumento y las personas que lo han contestado son inseparables.
 * Existe una medida de confiabilidad única para todo un instrumento, todos los reactivos y todos los respondentes. No podemos obtener la confiabilidad de un reactivo en particular
 
 Para facilitar la lectura, en adelante usaremos de manera indistinta "ítem" y "reactivo", además de que nos referiremos a respuestas "correctas" e "incorrectas" al hablar de respuestas que indican la presencia o ausencia de un rasgo latente, respectivamente.
 
 # CTT con R
-R cuenta con el paquete `CTT` que nos facilita realizar los análisis relacionado con este marco de referencia de manera sencilla.
+R cuenta con el paquete `CTT` que nos facilita realizar los análisis relacionados con este marco de referencia de manera sencilla.
 
 Instalamos este paquetes con la función `install.packages()`.
 
@@ -80,7 +80,7 @@ library(CTT)
 
 # Lectura y procesamiento de datos
 
-Usaremos un subconjunto de datos de una evaluación nacional de aprendizaje de matemáticas, realizada emn 2018 a estudiantes de sexto de primaria de México.
+Usaremos un subconjunto de datos de una evaluación nacional de aprendizaje de matemáticas, realizada en 2018 a estudiantes de sexto de primaria de México.
 
 Puedes descargar estos datos de la siguiente liga:
 
@@ -114,7 +114,7 @@ sapply(matematicas, table, useNA = "ifany")
 
 Para nuestro análisis, cada renglón del data frame debe representar a una persona y cada columna un ítem o reactivo al que han contestado, es decir,  cada renglón es un patrón de respuesta.
 
-Nuestros datos también deben estar codificados de modo que las respuestas correctas latente sean igual a $1$, mientras que las respuestas incorrectas o que indican la ausencia de un rasgo, sean igual a $0$.
+Nuestros datos también deben estar codificados de modo que las respuestas correctas latente sean igual a `1`, mientras que las respuestas incorrectas o que indican la ausencia de un rasgo, sean igual a `0`.
 
 Los datos que hemos leído cumplen con estas condiciones, pero veamos el caso para datos que esto no ocurre.
 
@@ -171,13 +171,13 @@ Veamos nuestro resultado.
 mate_recoded
 ```
 
-Si lo deseamos podemos usar nuestros datos recodificados más adelante llamándolos con `mate_recoded$scores`.
+Si lo deseamos podemos usar nuestros datos recodificados más adelante llamándolos con `mate_recoded`scores`.
 
 Veamos ahora el caso con datos ya codificados.
 
 ## Usando score() con datos codificados
 
-Si nuestros datos ya se encuentran codificados como $0$ igual a "incorrecto" y $1$ igual a "correcto", podemos usar la función `score()` de `CTT` para obtener los puntajes de cada persona.
+Si nuestros datos ya se encuentran codificados como `0` igual a "incorrecto" y `1` igual a "correcto", podemos usar la función `score()` de `CTT` para obtener los puntajes de cada persona.
 
 En este caso, dando como único argumento a `score()` nuestro data frame `matematicas` y asignamos los resultados a la variable `matematicas_score`.
 
@@ -192,7 +192,7 @@ Veamos las primeras diez entradas de nuestros resultados.
 matematicas_score$score[1:10]
 ```
 
-Nuevamente, el resultado corresponde a la suma de los valores iguales a $1$ de cada persona. No es un procedimiento particularmente complejo, en realidad podríamos replicar este proceso con la función `rowSums()` de R base.
+Nuevamente, el resultado corresponde a la suma de los valores iguales a `1` de cada persona. No es un procedimiento particularmente complejo, en realidad podríamos replicar este proceso con la función `rowSums()` de R base.
 
 ```{r}
 matematicas_score_rowsums <- rowSums(matematicas)
@@ -220,9 +220,9 @@ Los resultados más complejos de CTT los obtenemos con la función `itemAnalysis
 
 La función `itemAnalysis()` no devuelve un análisis de las principales propiedades psicométricas de los reactivos en nuestro conjunto de datos.
 
-Esta función nos pide como argumentos los patrones de respuesta codificados a $0$ y $1$ en un data frame. También podemos definir argumentos adicionales que cambian la manera en que nos son devueltos los resultados.
+Esta función nos pide como argumentos los patrones de respuesta codificados a `0` y `1` en un data frame. También podemos definir argumentos adicionales que cambian la manera en que nos son devueltos los resultados.
 
-En este caso, proporcionamos el argumento `hardFlag = 0.25`, para que sean marcados los reactivos con un valor de dificultad menor o igual a $0.25$; y el argumento `pBisFlag = 0.3`, para que sean marcados los reactivos con una discriminación menor o igual a $0.3$. 
+En este caso, proporcionamos el argumento `hardFlag = 0.25`, para que sean marcados los reactivos con un valor de dificultad menor o igual a `0.25`; y el argumento `pBisFlag = 0.3`, para que sean marcados los reactivos con una discriminación menor o igual a `0.3`. 
 
 Veremos la interpretación de estos valores un poco más adelante.
 
@@ -238,11 +238,11 @@ Si llamamos a la variable **matematicas_ctt** se nos muestra el resumen del aná
 matematicas_ctt
 ```
 
-Comprobamos que este resumen corresponde con nuestros datos, 25 reactivo y respuestas de 450 personas. También hemos obtenido un valor de Alpha de Cronbach igual a $0.836$. En la siguiente sección veremos cómo interpretar este y los demás demás resultados obtenidos.
+Comprobamos que este resumen corresponde con nuestros datos, 25 reactivo y respuestas de 450 personas. También hemos obtenido un valor de Alpha de Cronbach igual a `0.836`. En la siguiente sección veremos cómo interpretar este y los demás resultados obtenidos.
 
 ## Reporte e interpretación de resultados
 
-Para obtener un análisis detallado de nuestros reactivos, llamamos al elemento `$itemReport` de la variable **matematicas_ctt**.
+Para obtener un análisis detallado de nuestros reactivos, llamamos al elemento `itemReport` de la variable **matematicas_ctt**.
 
 ```{r}
 matematicas_ctt$itemReport
@@ -254,17 +254,17 @@ Veamos cómo interpretar cada parte de este reporte.
 El nombre del reactivo, corresponde al nombre de la columna del data frame con nuestros datos.
 
 ### itemMean
-La dificultad del reactivo, expresada como proporción de respuesta correcta o presencia del rasgo. Es decir, un reactivo con valores cercanos a $0$ es más "difícil", pues menos personas han contestado correctamente o elegido una respuesta que indica presencia de un rasgo. 
+La dificultad del reactivo, expresada como proporción de respuesta correcta o presencia del rasgo. Es decir, un reactivo con valores cercanos a `0` es más "difícil", pues menos personas han contestado correctamente o elegido una respuesta que indica presencia de un rasgo. 
 
-Si, por el contrario, los valores se encuentran cercanos a $1$, un reactivo es más "fácil", pues más personas lo han contestado correctamente o eligiendo una respuesta que indica presencia del rasgo. Naturalmente, podemos convertir estos valores a porcentaje multiplicándolos por $100$.
+Si, por el contrario, los valores se encuentran cercanos a `1`, un reactivo es más "fácil", pues más personas lo han contestado correctamente o eligiendo una respuesta que indica presencia del rasgo. Naturalmente, podemos convertir estos valores a porcentaje multiplicándolos por `100`.
 
-Si lo deseamos, podemos graficar las dificultades con `hist`.
+Si lo deseamos, podemos graficar las dificultades con `hist()`.
 
 ```{r dificultad_hist}
 hist(matematicas_ctt$itemReport$itemMean)
 ```
 
-En algunos casos es más fácil interpretar la dificultad si valores más cercanos a $1$ indican reactivos más difíciles y cercanos a 0, reactivos más fáciles. 
+En algunos casos es más fácil interpretar la dificultad si valores más cercanos a `1` indican reactivos más difíciles y cercanos a 0, reactivos más fáciles. 
 
 Podemos obtener estos valores, restamos las dificultades que hemos obtenido a 1.
 
@@ -275,29 +275,29 @@ Podemos obtener estos valores, restamos las dificultades que hemos obtenido a 1.
 ### pBis
 Correlación punto biserial (pBis). Es una medida de **discriminación**, que indica la correlación entre las respuesta a un reactivo en particular y el puntaje total de cada persona, es decir, entre una variable binaria y una variable continua.
 
-Valores cercanos a $1$ indican una asociación positiva o directa entre respuesta correctas o que indican la presencia de un rasgo con puntajes totales altos. Si este valor sea negativo, cercano a $-1$, una respuesta correcta o que indica presencia del rasgo es observada al mismo tiempo que un puntaje total bajo.
+Valores cercanos a `1` indican una asociación positiva o directa entre respuesta correctas o que indican la presencia de un rasgo con puntajes totales altos. Si este valor sea negativo, cercano a `-1`, una respuesta correcta o que indica presencia del rasgo es observada al mismo tiempo que un puntaje total bajo.
 
 De manera conceptual, un reactivo con una discriminación alta y positiva, es más probable que sea contestado correctamente por una persona que tiene alta magnitud del rasgo medido, que observamos a partir de un puntaje total alto.
 
 Reactivos con discriminación negativa indican un comportamiento inverso, es más probable que sean contestados correctamente por personas con una baja presencia del rasgo medido. Si esto ocurre, es necesaria una revisión del reactivo y es candidato para ser eliminado del instrumento.
 
-Consideramos $0.30$ como un valor aceptable de pBis.
+Consideramos `0.30` como un valor aceptable de pBis.
 
 ### bis
 Correlación biserial. También es un indicador de discriminación y tiende a devolver valores más altos que punto biserial. En realidad, esta correlación asume que ambas variables comparadas son binarias, de allí que se obtengan resultados distintos.
 
-$0.30$ es también un valor aceptable, pero es más fácil alcanzarlo con esta correlación.
+`0.30` es también un valor aceptable, pero es más fácil alcanzarlo con esta correlación.
 
 ### alphaIfDeleted
 Es el valor que tendrá el coeficiente Alfa de Cronbach si un reactivo en particular es eliminado.
 
-El coeficiente Alfa de Cronbach es un indicador de consistencia interna o confiabilidad de un instrumento psicométrico y puede asumir valores entre $0$ y $1$. Si obtenemos valores altos, cercanos a 1, asumimos que todos nuestros reactivos tiene cierta homogeneidad en lo que están midiendo, decimos que están "apuntando" en la misma dirección. 
+El coeficiente Alfa de Cronbach es un indicador de consistencia interna o confiabilidad de un instrumento psicométrico y puede asumir valores entre `0` y `1`. Si obtenemos valores altos, cercanos a 1, asumimos que todos nuestros reactivos tiene cierta homogeneidad en lo que están midiendo, decimos que están "apuntando" en la misma dirección. 
 
 Esta última analogía en realidad es más literal de lo que parece, pues obtenemos este coeficiente a partir de las covarianza (intercorrelaciones, expresadas en una matriz) de nuestros reactivos.
 
-Para fines prácticos, basta saber que valores de Alfa iguales o mayores a $0.80$ son considerados buenos.
+Para fines prácticos, basta saber que valores de Alfa iguales o mayores a `0.80` son considerados buenos.
 
-En nuestro caso, hemos obtenido un valor de $0.836$ y hay al menos un reactivo que podemos eliminar de nuestro análisis e incrementarán este valor (PMA_1). Los reactivos que aumentan el valor de Alfa al teóricamente están midiendo algo diferente a los demás, por lo tanto también deben revisarse.
+En nuestro caso, hemos obtenido un valor de `0.836` y hay al menos un reactivo que podemos eliminar de nuestro análisis e incrementarán este valor (PMA_1). Los reactivos que aumentan el valor de Alfa al teóricamente están midiendo algo diferente a los demás, por lo tanto, también deben revisarse.
 
 
 # Análisis de distractores con distractorAnalysis()
@@ -309,7 +309,7 @@ Por ejemplo, podemos encontrar que para un reactivo en particular, un distractor
 
 En ocasiones, observamos que un distractor está siendo elegido por las personas con desempeño más alto y la explicación se encuentra en el procesamiento de los datos. Por ejemplo, ha etiquetado de manera equivocada una respuesta correcta como si fuera incorrecta, o nuestra clave de respuesta contiene errores.
 
-Para realizar el análisis de distractores necesitamos los patrones de respuesta originales, antes de condificarse a $0$ y $1$. Usaremos un conjunto de datos y clave de respuesta incluidas con el paquete `CTT`.
+Para realizar el análisis de distractores necesitamos los patrones de respuesta originales, antes de codificarse a `0` y `1`. Usaremos un conjunto de datos y clave de respuesta incluidas con el paquete `CTT`.
 
 ```{r data_ctt}
 data(CTTdata)
@@ -339,17 +339,17 @@ Marca con un asterisco (`*`) la opción de respuesta correcta, de acuerdo con la
 El valor que corresponde a la opción de respuesta en nuestro conjunto de datos.
 
 ### n y rspP
-Cantidad de personas y proporción de personas que han elegido una opción en particular, respectivamente. Para este reactivo, la opción correcta fue elegida por 47 personas, una proporción de $0.47$.
+Cantidad de personas y proporción de personas que han elegido una opción en particular, respectivamente. Para este reactivo, la opción correcta fue elegida por 47 personas, una proporción de `0.47`.
 
 ### pBis
-Correlación punto biserial. Un indicador de discriminación que hemos revisado en este mismo documento. Para la respuesta correcta el valor es $0.53$, que se considera bueno. Las opciones incorrectas deben tener valores negativos, pues esto indica que han sido elegidas principalmente por personas con bajo nivel de desempeño.
+Correlación punto biserial. Un indicador de discriminación que hemos revisado en este mismo documento. Para la respuesta correcta el valor es `0.53`, que se considera bueno. Las opciones incorrectas deben tener valores negativos, pues esto indica que han sido elegidas principalmente por personas con bajo nivel de desempeño.
 
 ### discrim
 Un indicador de discriminación. Corresponde a la diferencia entre la proporción de personas en el nivel más alto de desempeño que han elegido la opción de respuesta, menos la proporción de personas en el nivel de desempeño más bajo que también la han elegido. Estos valores se encuentran en las columnas `lower` y `upper`.
 
-Entre más cercano sea este valor a $1$, mejor discrimina la opción de respuesta. Al igual que con la correlación punto biserial, las opciones de respuesta incorrecta deben tener discriminación negativa.
+Entre más cercano sea este valor a `1`, mejor discrimina la opción de respuesta. Al igual que con la correlación punto biserial, las opciones de respuesta incorrecta deben tener discriminación negativa.
 
-Para la respuesta correcta, el valor es $0.81$ ($0.94736842 - 0.1333333$), lo cual es bueno.
+Para la respuesta correcta, el valor es `0.81` (`0.94736842 - 0.1333333`), lo cual es bueno.
 
 ### lower, mid50, mid75, upper
 Cada columna nos indica la proporción en la que cada grupo de desempeño ha elegido cada opción de respuesta.
@@ -363,7 +363,7 @@ Cada grupo corresponde con un puntaje obtenido a todo el instrumento, en decir, 
 
 Lo que deseamos es tener opciones correctas que han sido elegidas en su mayoría por el grupo de desempeño más alto y el grupo de desempeño más bajo es el que menos la ha seleccionado. Idealmente, los grupos de desempeño eligen gradualmente en mayor proporción la respuesta correcta y, de manera inversa, menos veces las opciones de respuesta incorrectas.
 
-En este caso, el $94.7%$ del grupo de desempeño más alto eligió la respuesta correcta, mientras que el sólo la eligió el $13.3%$ del grupo de desempeño más bajo. Por esta razón, si en la columna `discrim` obtenemos un valor de $1$, podemos decir que tenemos una opción de respuesta con discriminación perfecta.
+En este caso, el `94.7%` del grupo de desempeño más alto eligió la respuesta correcta, mientras que el sólo la eligió el `13.3%` del grupo de desempeño más bajo. Por esta razón, si en la columna `discrim` obtenemos un valor de `1`, podemos decir que tenemos una opción de respuesta con discriminación perfecta.
 
 
 # Para concluir
