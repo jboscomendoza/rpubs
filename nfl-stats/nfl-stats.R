@@ -57,7 +57,7 @@ plot_decades <- function(team_sel, scores = nfl_scores) {
     ) %>% 
     na.omit()
   
-  team_title <- unique(scores_sel$team)
+  team_title <- paste(unique(scores_sel$team), collapse = "/")
   
   ggplot(scores_sel) +
     aes(schedule_week, cumulative, color = year)  +
@@ -83,7 +83,7 @@ plot_win_ratio <- function(team_sel, scores = nfl_scores) {
     group_by(team, schedule_season) %>% 
     summarise(win_rate = mean(victory, na.rm = T)) 
   
-  team_title <- unique(scores_sel$team)
+  team_title <- paste(unique(scores_sel$team), collapse = "/")
   
   ggplot(scores_sel) +
     aes(schedule_season, win_rate) +
@@ -110,7 +110,7 @@ plot_win_ratio_status <- function(team_sel, scores = nfl_scores) {
     group_by(team, schedule_season, status) %>% 
     summarise(win_rate = mean(victory, na.rm = T))
   
-  team_title <- unique(scores_sel$team)
+  team_title <- paste(unique(scores_sel$team), collapse = "/")
   
   ggplot(scores_sel) +
     aes(schedule_season, win_rate, color = status, fill = status) +
