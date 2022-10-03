@@ -1,23 +1,32 @@
 # Data source
 # https://www.kaggle.com/datasets/tobycrabtree/nfl-scores-and-betting-data
-
 library(tidyverse)
+library(arrow)
 
 # Read and process ####
 groups <- c("home", "away")
+week_names  <- c(str_pad(as.character(1:18), width = 2, side = "left", pad = "0"),
+                 "P1W", "P2D", "P3C", "SB")
+  
+
+team_names <- read_csv("nfl_teams.csv")
+nfl_data_raw <- read_csv("spreadspoke_scores.csv")
 
 nfl_data <- 
-  read_csv("spreadspoke_scores.csv") %>% 
+  nfl_data_raw %>% 
   select(1:8) %>% 
   mutate(winner = ifelse(score_home > score_away, "home", "away"),
          point_dif = abs(score_home - score_away),
          schedule_week = case_when(
-           schedule_week == "Wildcard" ~ "W",
-           schedule_week == "Division" ~ "D",
-           schedule_week == "Conference" ~ "C",
-           schedule_week == "Superbowl" ~ "S",
+           schedule_week %in% c("Wildcard", "WildCard") ~ "P1W",
+           schedule_week == "Division" ~ "P2D",
+           schedule_week == "Conference" ~ "P3C",
+           schedule_week %in% c("Superbowl", "SuperBowl") ~ "SB",
            is.character(schedule_week) ~ schedule_week
-         ))
+         ),
+         schedule_week = str_pad(schedule_week, width = 2, side = "left", 
+                                 pad = "0")
+         )
 
 nfl_df <- 
   map_df(groups, function(x) {
@@ -32,19 +41,30 @@ nfl_df <-
       mutate(status = x)
   })
 
-nfl_scores <- 
+nfl_scores_no_id <- 
   nfl_df %>% 
   mutate(
     victory = ifelse(winner == status, TRUE, FALSE),
     point_dif = ifelse(victory, point_dif, -point_dif),
     schedule_week = factor(schedule_week, ordered = TRUE,
-                           levels = c(1:18, "W", "D", "C", "S"))
+                           levels = week_names)
   ) %>% 
   arrange(schedule_season, schedule_week) %>% 
   group_by(schedule_season, team) %>% 
   mutate(cumulative = cumsum(victory),
          status = ifelse(status == "away", "Away", "Home")) %>% 
   ungroup()
+
+nfl_scores <-  
+  left_join(nfl_scores_no_id, 
+            select(team_names, "team" = "team_name", "team_id", 
+                   "team_division", "team_conference"), 
+            by = c("team")) %>% 
+  mutate(
+    decade = floor(schedule_season / 10) * 10,
+    year = as.numeric(substr(schedule_season, 4, 4))
+  )
+
 
 # Plot funs ####
 plot_decades <- function(team_sel, scores = nfl_scores) {
@@ -161,3 +181,8 @@ plot_decades(my_team)
 plot_win_ratio(my_team)
 plot_win_ratio_status(my_team)
 plot_pointdif(my_team)
+
+
+# Exports ####
+write_csv(nfl_scores, "nfl_scores.csv")
+write_parquet(nfl_scores, "nfl_scores.parquet")
