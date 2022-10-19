@@ -1,33 +1,28 @@
 library(dplyr)
 library(stringr)
-library(rgdal)
-library(tmap)
 library(rvest)
 library(arrow)
 
 # Descarga ####
-sitio   <- "https://datos.cdmx.gob.mx/dataset/"
-csv_url <- "f4be0114-49fd-4a4a-84ab-3d12b54d9435/resource/2aace691-0dc3-4e80-9564-92d56a9e9022/download/escuelas-publicas.csv"
-shape_url   <- "f4be0114-49fd-4a4a-84ab-3d12b54d9435/resource/36f5678b-1b48-43c3-bd09-8ec7751aad12/download/escuelas_publicas.zip"
+sitio <- "https://datos.cdmx.gob.mx/dataset/"
+url_csv_publicas <- "f4be0114-49fd-4a4a-84ab-3d12b54d9435/resource/2aace691-0dc3-4e80-9564-92d56a9e9022/download/escuelas-publicas.csv"
+url_csv_privadas <- "6ab735f4-a764-449b-8e1e-f527f7fd304d/resource/72f904fb-3d44-48f4-a376-6aa635d06acc/download/escuelas-privadas.csv"
 
 # mode = "wb" es necesario para Windows
-download.file(paste0(sitio, csv_url),   mode = "wb", "escuelas_publicas.csv")
-download.file(paste0(sitio, shape_url), mode = "wb", "escuelas_publicas.zip")
+download.file(paste0(sitio, url_csv_publicas), mode = "wb", "escuelas_publicas.csv")
+download.file(paste0(sitio, url_csv_privadas), mode = "wb", "escuelas_privadas.csv")
 
-unzip(zipfile = "escuelas_publicas.zip")
 
-# Lectura y procesamiento ####
-shapefile <- rgdal::readOGR(dsn = "escuelas_publicas/escuelas_publicas.shp")
-
-datos_raw <- read.csv("escuelas_publicas.csv") %>% as_tibble()
+# Publicas - Lectura y procesamiento ####
+datos_publicas <- read.csv("escuelas_publicas.csv") %>% as_tibble()
 
 
 # Se muestran codificaciones a "5. Otro", pero pueden ser de mayor especificidad
 # Por ejemplo, categorizar a CAM y CAPEP como Educación Especial
-datos_servicio <- 
-  datos_raw %>% 
+datos_nivel <- 
+  datos_publicas %>% 
   select(id, nombre) %>% 
-  mutate(servicio = case_when(
+  mutate(nivel = case_when(
     str_detect(nombre, "CENDI|LACTANTE") ~ "1. Inicial",
     str_detect(nombre, "INTERVENCION TEMPRANA") ~ "5. Otro",
     str_detect(nombre, "CAPEP") ~ "5. Otro",
@@ -43,10 +38,9 @@ datos_servicio <-
   )) %>% 
   select(-nombre)
 
-
-# Datos adicionales ####
+# Datos de alcaldia
 datos_alcaldia <- 
-  datos_raw %>% 
+  datos_publicas %>% 
   select(id, domicilio_con_nombre) %>% 
   mutate(alcaldia = str_extract(domicilio_con_nombre, "(?<=DELEGACION).*?(?=, MEXICO)"),
          alcaldia = str_squish(alcaldia)) %>% 
@@ -55,10 +49,54 @@ datos_alcaldia <-
   filter(!is.na(alcaldia)) %>% 
   select(-domicilio_con_nombre)
 
+
+# Datos de nivel y alcaldia
 datos_simple <- 
-  inner_join(datos_raw, datos_servicio, by = "id") %>% 
+  inner_join(datos_publicas, datos_nivel, by = "id") %>% 
   inner_join(., datos_alcaldia, by = "id") %>% 
-  select(id, servicio, alcaldia)
+  select(id, nivel, alcaldia)
+
+publicas <- 
+  datos_publicas %>% 
+  select(id, latitud, longitud, geopoint) %>% 
+  left_join(datos_simple, by = "id") %>%
+  mutate(sostenimiento = "Pública",
+         id = paste0("pu_", id),
+         ) %>% 
+  rename("lat" = "latitud", "lon" = "longitud")
+
+
+# Privadas - Lectura y procesamiento ####
+datos_privadas <- 
+  read.csv("escuelas_privadas.csv") %>% 
+  as_tibble() %>% 
+  select(id, lat, lon, coordenadas, nivel, alcaldia) %>% 
+  rename("geopoint" = "coordenadas", 
+         "nivel" = "nivel") %>% 
+  as_tibble()
+
+privadas <- 
+  datos_privadas %>% 
+  mutate(nivel = case_when(
+    nivel %in% c("INICIAL", "Preescolar - Inicial *") ~ "1. Inicial",
+    nivel %in% c("Preescolar") ~ "2. Preescolar",
+    nivel %in% c("Primaria")   ~ "3. Primaria",
+    nivel %in% c("Secundaria") ~ "4. Secundaria",
+    nivel %in% c("Adultos") ~ "5. Otro",
+    nivel %in% c("Especial - CAM") ~ "5. Otro",
+    TRUE ~ nivel
+  )) %>% 
+  select(id, lat, lon, geopoint, nivel, alcaldia) %>% 
+  mutate(sostenimiento = "Privada",
+         id = paste0("pr_", id))
+
+
+# Unir publicas y privadas ####
+escuelas <- bind_rows(publicas, privadas)
+
+
+# Esportar datos ####
+write_parquet(escuelas, "escuelas_cdmx.parquet")
 
 
 # Poblacion #####
@@ -78,26 +116,4 @@ poblacion <-
   mutate(alcaldia = chartr(alcaldia, old = "Ááéó", new = "Aaeo"),
          alcaldia = toupper(alcaldia))
 
-
-# Esportar datos ####
-datos_raw %>% 
-  select(id, latitud, longitud, geopoint) %>% 
-  left_join(datos_simple, by = "id") %>% 
-  write_parquet("esc_publicas_cdmx.parquet")
-
-write_parquet(poblacion, "poblacion.parquet")
-
-
-# Mapa ####
-paleta <- c("#BACC81", "#FBE7C6", "#A0E7E5", "#FFAEBC", "#DDDDDD")
-
-shapefile@data <- left_join(shapefile@data, datos_servicio, by = "id")
-
-tmap_mode("view")
-tm_shape(shapefile) +
-  tm_dots(
-    title = "Escuelas públicas de educación básica - CDMX", 
-    col = "servicio",
-    palette = paleta,
-    popup.vars = TRUE
-  )
+write_parquet(poblacion, "poblacion_cdmx.parquet")
