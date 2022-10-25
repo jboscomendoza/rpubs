@@ -70,7 +70,8 @@ ui <- fluidPage(
           "Comparativo",
           fluidRow(column(6, check_alc_vsa),
                    column(6, check_alc_vsb)),
-          fluidRow(column(12, plotlyOutput("comparativo_n")))
+          fluidRow(column(12, plotlyOutput("comparativo_n"))),
+          fluidRow(column(12, plotlyOutput("comparativo_prop"))),
         )
       )
     )
@@ -175,17 +176,61 @@ server <- function(input, output) {
       filter(alcaldia %in% c(input$check_alc_vsa, input$check_alc_vsb)) %>%
       filter(nivel %in% input$check_niv & sostenimiento %in% input$check_sos) %>% 
       count(alcaldia, nivel) %>% 
-      plot_ly(type = "scatter", x = ~nivel, y = ~n, color = ~alcaldia) %>% 
+      pivot_wider(names_from = "alcaldia", values_from = "n") %>% 
+      plot_ly(color = I("#cccccc")) %>% 
+      add_segments(
+        x = as.formula(paste0("~`", input$check_alc_vsa, "`")), 
+        xend = as.formula(paste0("~`", input$check_alc_vsb, "`")), 
+        y = ~nivel, yend = ~nivel, showlegend = FALSE
+      ) %>% 
+      add_markers(x = as.formula(paste0("~`", input$check_alc_vsa, "`")), 
+                  y = ~nivel, name = input$check_alc_vsa, color = I("#2a9d8f"),
+                  size = 3) %>% 
+      add_markers(x = as.formula(paste0("~`", input$check_alc_vsb, "`")), 
+                  y = ~nivel, name = input$check_alc_vsb, color = I("#e9c46a"),
+                  size = 3) %>% 
       layout(
+        margin = list(l = 65),
         xaxis = list(
           title = "Conteo (n)"
-          #range = list(0, maximo)
         ),
         yaxis = list(
           title = "Nivel"
         ))
   )
   
+  output$comparativo_prop <- renderPlotly(
+    escuelas %>% 
+      filter(alcaldia %in% c(input$check_alc_vsa, input$check_alc_vsb)) %>%
+      filter(nivel %in% input$check_niv & sostenimiento %in% input$check_sos) %>% 
+      group_by(nivel, alcaldia) %>% 
+      count(sostenimiento) %>% 
+      mutate(Prop = n / sum(n),
+             Prop = round(Prop * 100, 1)) %>% 
+      select(-n) %>% 
+      pivot_wider(names_from = "alcaldia", values_from = "Prop") %>% 
+      unite(nivel, sostenimiento, col = "tipo", sep = " - ") %>% 
+      plot_ly(color = I("#cccccc")) %>% 
+      add_segments(
+        x = as.formula(paste0("~`", input$check_alc_vsa, "`")), 
+        xend = as.formula(paste0("~`", input$check_alc_vsb, "`")), 
+        y = ~tipo, yend = ~tipo, showlegend = FALSE
+      ) %>% 
+      add_markers(x = as.formula(paste0("~`", input$check_alc_vsa, "`")), 
+                  y = ~tipo, name = input$check_alc_vsa, color = I("#2a9d8f"),
+                  size = 3) %>% 
+      add_markers(x = as.formula(paste0("~`", input$check_alc_vsb, "`")), 
+                  y = ~tipo, name = input$check_alc_vsb, color = I("#e9c46a"),
+                  size = 3) %>% 
+      layout(
+        margin = list(l = 65),
+        xaxis = list(
+          title = "Proporción (%)"
+        ),
+        yaxis = list(
+          title = "Nivel y sostenimiento"
+        ))
+  )
 }
 
 # Run ####
