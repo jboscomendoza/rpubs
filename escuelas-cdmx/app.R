@@ -1,7 +1,7 @@
 library(shiny)
 library(arrow)
 library(dplyr)
-library(ggplot2)
+library(tidyr)
 library(plotly)
 
 escuelas <- 
@@ -58,13 +58,15 @@ ui <- fluidPage(
         tabPanel(
           "General",
           fluidRow(column(6, plotlyOutput("escuelas_n")),
-                   column(6, plotlyOutput("escuelas_prop")))
+                   column(6, plotlyOutput("escuelas_prop"))),
+          fluidRow(column(12, plotlyOutput("escuelas_map")))
         ),
         tabPanel(
           "Por alcaldía",
           fluidRow(column(12, check_alc)),
           fluidRow(column(6, plotlyOutput("alcaldias_n")),
-                   column(6, plotlyOutput("alcaldias_prop")))
+                   column(6, plotlyOutput("alcaldias_prop"))),
+          fluidRow(column(12, plotlyOutput("alcaldias_map")))
         ),
         tabPanel(
           "Comparativo",
@@ -130,6 +132,8 @@ server <- function(input, output) {
   
   output$escuelas_n <- renderPlotly(
     escuelas %>% 
+      filter(nivel %in% input$check_niv) %>% 
+      filter(sostenimiento %in% input$check_sos) %>% 
       count(nivel) %>% 
       mutate(CDMX = "CDMX") %>% 
       create_plot_n()
@@ -146,6 +150,22 @@ server <- function(input, output) {
       filter(nivel %in% input$check_niv) %>% 
       filter(sostenimiento %in% input$check_sos) %>% 
       create_plot_prop()
+  )
+  
+  output$escuelas_map <- renderPlotly(
+    escuelas %>% 
+      filter(nivel %in% input$check_niv) %>% 
+      filter(sostenimiento %in% input$check_sos) %>% 
+      plot_geo(
+        lat = ~lat, lon = ~lon, mode = "markers",
+        color = ~sostenimiento, colors = c("#2a9d8f", "#e76f51", "#e9c46a"),
+        marker = list(
+          size = 6, sizemin = 4, opacity = .45, symbol  = "diamond-dot"
+        )
+        ) %>% 
+      layout(
+        geo = list(fitbounds = "locations")
+      )
   )
   
   output$alcaldias_n <- renderPlotly(
@@ -170,7 +190,22 @@ server <- function(input, output) {
       filter(sostenimiento %in% input$check_sos) %>% 
       create_plot_prop()
   )
+  
+  output$alcaldias_map <- renderPlotly(
+    escuelas %>% 
+      seleccion(input) %>% 
+      plot_geo(
+        lat = ~lat, lon = ~lon, mode = "markers",
+        symbol = ~sostenimiento, color = ~nivel, 
+        colors = c("#2a9d8f", "#9b5de5", "#e9c46a", "#00bbf9" , "#9d6b53"),
+        marker = list(size = 8, sizemin = 6, opacity = .85)
+      ) %>% 
+      layout(
+        geo = list(fitbounds = "locations")
+      )
+  )
 
+  
   output$comparativo_n <- renderPlotly(
     escuelas %>% 
       filter(alcaldia %in% c(input$check_alc_vsa, input$check_alc_vsb)) %>%
@@ -231,6 +266,7 @@ server <- function(input, output) {
           title = "Nivel y sostenimiento"
         ))
   )
+
 }
 
 # Run ####
