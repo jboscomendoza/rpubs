@@ -1,18 +1,19 @@
-# install.packages(c("tidyverse", "httr"))
+# install.packages(c("tidyverse", "httr2"))
 library(tidyverse)
-library(httr)
+library(httr2)
 
 
 # Obten una API key de last.fm en:
 # https://www.last.fm/api
 api_key <- ""
-lastfm_root <- "http://ws.audioscrobbler.com/2.0/"
 
+lastfm_root <- "http://ws.audioscrobbler.com/2.0/"
 
 usuario <- "zegim"
 periodo <- "12month"
 limite_artistas  <- "50"
 limite_canciones <- "50"
+
 
 # Artistas más reproducidos ####
 method_artistas <- "user.gettopartists"
@@ -27,10 +28,11 @@ request_artistas <- paste0(
   "&format=json"
 )
 
-response_artistas <- GET(request_artistas)
-status_code(response_artistas)
+contenido_artistas <- 
+  request(request_artistas) %>% 
+  req_perform() %>% 
+  resp_body_json()
 
-contenido_artistas <- content(response_artistas)
 df_artistas <- 
   map_df(contenido_artistas$topartists$artist, function(x_artist) {
   tibble(
@@ -52,12 +54,13 @@ request_canciones <- paste0(
   "&format=json"
 )
 
-response_canciones <- GET(request_canciones)
-status_code(response_canciones)
+contenido_canciones <- 
+  request(request_canciones) %>% 
+  req_perform() %>% 
+  resp_body_json()
 
-content_canciones <- content(response_canciones)
 df_canciones <- 
-  map_df(content_canciones$toptracks$track, function(x){
+  map_df(contenido_canciones$toptracks$track, function(x){
     tibble(
       "cancion" = x[["name"]],
       "artista" = x[["artist"]][["name"]],
@@ -65,6 +68,13 @@ df_canciones <-
       "duracion" = as.numeric(x[["duration"]])
     )
   })
+
+df_canciones <- 
+  df_canciones %>% 
+  mutate(
+    duracion = ifelse(duracion == 0, NA, duracion),
+    duracion = ifelse(is.na(duracion), median(duracion, na.rm = TRUE), duracion)
+  )
 
 
 # Tags principales ####
@@ -81,22 +91,29 @@ get_artist_tags <- function(artist, api_key, limit=15) {
     "&format=json"
   )
 
-  response_tags <- GET(request_tags)
-  if (status_code(response_tags) == 200) {
-    content_tags <- content(response_tags)
-    map_df(content_tags$toptags$tag[1:limit], function(x) {
-      tibble("artista" = artist, "tag" = x[["name"]])
+  contenido_tags <- 
+    request(request_tags) %>% 
+    req_perform() %>% 
+    resp_body_json()
+  
+  if (is.null(contenido_tags[["error"]])) {
+    map_df(contenido_tags$toptags$tag[1:limit], function(tag) {
+      tibble("artista" = artist, "tag" = tag[["name"]])
     })
   } else {
     NULL
   }
 }
 
+
 df_tags <- map_df(artistas, function(artista) {
-  Sys.sleep(0.05)
+  Sys.sleep(0.01)
   get_artist_tags(artista, api_key)
 })
 
+df_tags <- 
+  df_tags %>%  
+  mutate(tag = str_to_lower(tag))
 
 # Artistas con más tiempo reproducido
 df_tiempo <-
@@ -133,6 +150,7 @@ df_tags %>%
     aes(label = tag, y = .2),
     hjust = "left",
     color = "#ffffff",
+    size = 2.5
   ) +
   scale_y_continuous(expand = c(0, 0)) +
   labs(title = "Tags principales", x = "", y = "") +
@@ -141,6 +159,14 @@ df_tags %>%
     panel.grid = element_blank(),
     axis.text = element_blank()
   )
+
+ggsave(
+  "lastfm_tags.png", 
+  bg = "#ffffff",
+  units = "px", height = 400, width = 600, 
+  dpi = 300, scale = 2
+)
+
 
 # Artistas más reproducidos
 df_artistas %>%
@@ -159,6 +185,7 @@ df_artistas %>%
     aes(label = artista, y = 5),
     hjust = "left",
     color = "#ffffff",
+    size = 2.5
   ) +
   scale_y_continuous(expand = c(0, 0)) +
   labs(title = "Artistas más reproducidos", x = "", y = "") +
@@ -167,6 +194,14 @@ df_artistas %>%
     panel.grid = element_blank(),
     axis.text = element_blank()
   )
+
+ggsave(
+  "lastfm_artistas.png", 
+  bg = "#ffffff",
+  units = "px", height = 400, width = 600, 
+  dpi = 300, scale = 2
+  )
+
 
 # Canciones más reproducidas
 df_canciones %>%
@@ -185,7 +220,8 @@ df_canciones %>%
   geom_text(
     aes(label = cancion, y = 0.5),
     hjust = "left",
-    color = "#ffffff",
+    color = "#ffffff", 
+    size = 2.5
   ) +
   scale_y_continuous(expand = c(0, 0)) +
   labs(title = "Canciones más reproducidas", x = "", y = "") +
@@ -194,6 +230,14 @@ df_canciones %>%
     panel.grid = element_blank(),
     axis.text = element_blank()
   )
+
+ggsave(
+  "lastfm_canciones.png", 
+  bg = "#ffffff",
+  units = "px", height = 400, width = 600, 
+  dpi = 300, scale = 2
+)
+
 
 # Tiempo reproducido
 df_tiempo %>%
@@ -216,11 +260,19 @@ df_tiempo %>%
     aes(label = artista, y = 3),
     hjust = "left",
     color = "#ffffff",
+    size = 2.5, 
   ) +
   scale_y_continuous(expand = c(0, 0)) +
-  labs(title = "Artistas con más tiempo reproducido", x = "", y = "") +
+  labs(title = "Artistas con más tiempo reproducido\n(minutos)", x = "", y = "") +
   theme_minimal() +
   theme(
     panel.grid = element_blank(),
     axis.text = element_blank()
   )
+
+ggsave(
+  "lastfm_tiempo.png", 
+  bg = "#ffffff",
+  units = "px", height = 400, width = 600, 
+  dpi = 300, scale = 2
+)
