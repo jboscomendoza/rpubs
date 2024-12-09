@@ -1,3 +1,4 @@
+# install.packages(c("tidyverse", "httr"))
 library(tidyverse)
 library(httr)
 
@@ -6,104 +7,114 @@ library(httr)
 # https://www.last.fm/api
 api_key <- ""
 lastfm_root <- "http://ws.audioscrobbler.com/2.0/"
-user <- "zegim"
 
 
-# Top Artists ####
-met_top_artists <- "user.gettopartists"
+usuario <- "zegim"
+periodo <- "12month"
+limite_artistas  <- "50"
+limite_canciones <- "50"
 
-req_top_artists <- paste0(
+# Artistas más reproducidos ####
+method_artistas <- "user.gettopartists"
+
+request_artistas <- paste0(
   lastfm_root,
-  "?method=", met_top_artists,
-  "&user=", user,
+  "?method=", method_artistas,
+  "&user=", usuario,
   "&api_key=", api_key,
-  "&format=json",
-  "&period=12month",
-  "&limit=30"
+  "&period=", periodo,
+  "&limit=", limite_artistas,
+  "&format=json"
 )
 
-res_top_artists <- GET(req_top_artists)
-status_code(res_top_artists)
+response_artistas <- GET(request_artistas)
+status_code(response_artistas)
 
-con_top_artists <- content(res_top_artists)
-df_top_artists <- map_df(con_top_artists$topartists$artist, function(x_artist) {
+contenido_artistas <- content(response_artistas)
+df_artistas <- 
+  map_df(contenido_artistas$topartists$artist, function(x_artist) {
   tibble(
-    "artist" = x_artist[["name"]],
-    "playcount" = as.numeric(x_artist[["playcount"]]))
+    "artista" = x_artist[["name"]],
+    "reproducciones" = as.numeric(x_artist[["playcount"]]))
 })
 
 
-# Top Tracks ####
-met_top_tracks <- "user.gettoptracks"
+# Canciones más reproducidas ####
+method_canciones <- "user.gettoptracks"
 
-req_top_tracks <- paste0(
+request_canciones <- paste0(
   lastfm_root,
-  "?method=", met_top_tracks,
-  "&user=", user,
+  "?method=", method_canciones,
+  "&user=", usuario,
   "&api_key=", api_key,
-  "&format=json",
-  "&period=12month",
-  "&limit=50"
+  "&period=", periodo,
+  "&limit=", limite_canciones,
+  "&format=json"
 )
 
-res_top_tracks <- GET(req_top_tracks)
-status_code(res_top_tracks)
+response_canciones <- GET(request_canciones)
+status_code(response_canciones)
 
-con_top_tracks <- content(res_top_tracks)
-df_top_tracks <- map_df(con_top_tracks$toptracks$track, function(x){
-  tibble(
-    "track" = x[["name"]],
-    "artist" = x[["artist"]][["name"]],
-    "playcount" = as.numeric(x[["playcount"]]),
-    "duration" = as.numeric(x[["duration"]])
-  )
-})
+content_canciones <- content(response_canciones)
+df_canciones <- 
+  map_df(content_canciones$toptracks$track, function(x){
+    tibble(
+      "cancion" = x[["name"]],
+      "artista" = x[["artist"]][["name"]],
+      "reproducciones" = as.numeric(x[["playcount"]]),
+      "duracion" = as.numeric(x[["duration"]])
+    )
+  })
 
-# Get top tags ####
-artists <- df_top_artists$name
 
+# Tags principales ####
+artistas <- df_artistas$artista
+
+# Función para obtener tags por artista
 get_artist_tags <- function(artist, api_key, limit=15) {
-  r_artist_tags <- paste0(
+  method_tags <- "artist.getTopTags"
+  request_tags <- paste0(
     lastfm_root,
-    "?method=artist.getTopTags",
+    "?method=", method_tags,
     "&artist=", str_replace_all(artist, " ", "+"),
     "&api_key=", api_key,
     "&format=json"
   )
 
-  get_artist_tags <- GET(r_artist_tags)
-  if (status_code(get_artist_tags) == 200) {
-    con_artist_tags <- content(get_artist_tags)
-    map_df(con_artist_tags$toptags$tag[1:limit], function(x) {
-      tibble("artist" = artist, "tag" = x[["name"]])
+  response_tags <- GET(request_tags)
+  if (status_code(response_tags) == 200) {
+    content_tags <- content(response_tags)
+    map_df(content_tags$toptags$tag[1:limit], function(x) {
+      tibble("artista" = artist, "tag" = x[["name"]])
     })
   } else {
     NULL
   }
 }
 
-df_artists_tags <- map_df(artists, function(x) {
+df_tags <- map_df(artistas, function(artista) {
   Sys.sleep(0.05)
-  get_artist_tags(x, api_key)
+  get_artist_tags(artista, api_key)
 })
 
+
 # Artistas con más tiempo reproducido
-df_time_played <-
-  df_top_tracks %>%
-  mutate(tiempo = playcount * duration) %>%
-  group_by(artist) %>%
+df_tiempo <-
+  df_canciones %>%
+  mutate(tiempo = reproducciones * duracion) %>%
+  group_by(artista) %>%
   summarise(tiempo = sum(tiempo)) %>%
   ungroup() %>%
   arrange(desc(tiempo)) %>%
   mutate(
     minutos = tiempo /60,
     horas = minutos / 60
-    )
+  )
 
 
 # Plots ####
 # Tags principales
-df_artists_tags %>%
+df_tags %>%
   mutate(tag = str_to_lower(tag)) %>%
   filter(!tag %in% c(NA, "seen live")) %>%
   count(tag, sort = TRUE) %>%
@@ -132,20 +143,20 @@ df_artists_tags %>%
   )
 
 # Artistas más reproducidos
-df_top_artists %>%
-  top_n(10, wt = playcount) %>%
-  mutate(artist = reorder(artist, playcount, decreasing = FALSE)) %>%
+df_artistas %>%
+  top_n(10, wt = reproducciones) %>%
+  mutate(artista = reorder(artista, reproducciones, decreasing = FALSE)) %>%
   ggplot() +
-  aes(artist, playcount) +
+  aes(artista, reproducciones) +
   coord_flip() +
   geom_col(fill = "#1a759f") +
   geom_text(
-    aes(label = playcount),
+    aes(label = reproducciones),
     hjust = 1.5,
     color = "#ffffff",
   ) +
   geom_text(
-    aes(label = artist, y = 5),
+    aes(label = artista, y = 5),
     hjust = "left",
     color = "#ffffff",
   ) +
@@ -158,16 +169,16 @@ df_top_artists %>%
   )
 
 # Canciones más reproducidas
-df_top_tracks %>%
-  top_n(10, wt = playcount) %>%
-  mutate(cancion = paste0(track, " [", artist, "]")) %>%
-  mutate(cancion = reorder(cancion, playcount, decreasing = FALSE)) %>%
+df_canciones %>%
+  top_n(10, wt = reproducciones) %>%
+  mutate(cancion = paste0(cancion, " [", artista, "]")) %>%
+  mutate(cancion = reorder(cancion, reproducciones, decreasing = FALSE)) %>%
   ggplot() +
-  aes(cancion, playcount) +
+  aes(cancion, reproducciones) +
   coord_flip() +
   geom_col(fill = "#55a630") +
   geom_text(
-    aes(label = playcount),
+    aes(label = reproducciones),
     hjust = 1.5,
     color = "#ffffff",
   ) +
@@ -185,16 +196,16 @@ df_top_tracks %>%
   )
 
 # Tiempo reproducido
-df_time_played %>%
+df_tiempo %>%
   mutate(
-    artist = reorder(artist, tiempo, decreasing = FALSE),
+    artista = reorder(artista, tiempo, decreasing = FALSE),
     minutos = round(minutos)
     ) %>%
   top_n(10, wt = tiempo) %>%
   ggplot() +
-  aes(artist, round(minutos)) +
+  aes(artista, round(minutos)) +
   coord_flip() +
-  geom_col(fill = "#967aa1") +
+  geom_col(fill = "#b5838d") +
   geom_text(
     aes(label = minutos),
     hjust = "right",
@@ -202,7 +213,7 @@ df_time_played %>%
     color = "#ffffff",
   ) +
   geom_text(
-    aes(label = artist, y = 3),
+    aes(label = artista, y = 3),
     hjust = "left",
     color = "#ffffff",
   ) +
