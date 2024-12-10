@@ -412,7 +412,7 @@ df_conteo_tags <-
   df_tags %>%  
   mutate(
     tag = str_to_lower(tag),
-    tag = str_replace_all(tag, "-", " ")
+    tag = str_replace_all(tag, "-", " "),
     tag = str_replace_all(tag, "electronica", "electronic")
   ) %>% 
   count(tag, sort = TRUE) %>% 
