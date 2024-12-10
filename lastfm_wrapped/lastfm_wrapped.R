@@ -16,11 +16,11 @@ limite_canciones <- "50"
 
 
 # Artistas más reproducidos ####
-method_artistas <- "user.gettopartists"
+metodo_artistas <- "user.gettopartists"
 
 request_artistas <- paste0(
   lastfm_root,
-  "?method=", method_artistas,
+  "?method=", metodo_artistas,
   "&user=", usuario,
   "&api_key=", api_key,
   "&period=", periodo,
@@ -42,11 +42,11 @@ df_artistas <-
 
 
 # Canciones más reproducidas ####
-method_canciones <- "user.gettoptracks"
+metodo_canciones <- "user.gettoptracks"
 
 request_canciones <- paste0(
   lastfm_root,
-  "?method=", method_canciones,
+  "?method=", metodo_canciones,
   "&user=", usuario,
   "&api_key=", api_key,
   "&period=", periodo,
@@ -77,16 +77,30 @@ df_canciones <-
   )
 
 
+# Artistas con más tiempo de reproducción
+df_tiempo <-
+  df_canciones %>%
+  mutate(tiempo = reproducciones * duracion) %>%
+  group_by(artista) %>%
+  summarise(tiempo = sum(tiempo)) %>%
+  ungroup() %>%
+  arrange(desc(tiempo)) %>%
+  mutate(
+    minutos = tiempo / 60,
+    horas = tiempo / 3600
+  )
+
+
 # Tags principales ####
 artistas <- df_artistas$artista
 
 # Función para obtener tags por artista
-get_artist_tags <- function(artist, api_key, limit=15) {
-  method_tags <- "artist.getTopTags"
+obtener_tags <- function(artista, api_key, limite=15) {
+  metodo_tags <- "artist.getTopTags"
   request_tags <- paste0(
     lastfm_root,
-    "?method=", method_tags,
-    "&artist=", str_replace_all(artist, " ", "+"),
+    "?method=", metodo_tags,
+    "&artist=", str_replace_all(artista, " ", "+"),
     "&api_key=", api_key,
     "&format=json"
   )
@@ -97,8 +111,8 @@ get_artist_tags <- function(artist, api_key, limit=15) {
     resp_body_json()
   
   if (is.null(contenido_tags[["error"]])) {
-    map_df(contenido_tags$toptags$tag[1:limit], function(tag) {
-      tibble("artista" = artist, "tag" = tag[["name"]])
+    map_df(contenido_tags$toptags$tag[1:limite], function(tag) {
+      tibble("artista" = artista, "tag" = tag[["name"]])
     })
   } else {
     NULL
@@ -108,24 +122,14 @@ get_artist_tags <- function(artist, api_key, limit=15) {
 
 df_tags <- map_df(artistas, function(artista) {
   Sys.sleep(0.01)
-  get_artist_tags(artista, api_key)
+  obtener_tags(artista, api_key)
 })
 
 df_tags <- 
   df_tags %>%  
-  mutate(tag = str_to_lower(tag))
-
-# Artistas con más tiempo reproducido
-df_tiempo <-
-  df_canciones %>%
-  mutate(tiempo = reproducciones * duracion) %>%
-  group_by(artista) %>%
-  summarise(tiempo = sum(tiempo)) %>%
-  ungroup() %>%
-  arrange(desc(tiempo)) %>%
   mutate(
-    minutos = tiempo /60,
-    horas = minutos / 60
+    tag = str_to_lower(tag),
+    tag = str_replace_all(tag, "-", " ")
   )
 
 
@@ -263,7 +267,7 @@ df_tiempo %>%
     size = 2.5, 
   ) +
   scale_y_continuous(expand = c(0, 0)) +
-  labs(title = "Artistas con más tiempo reproducido\n(minutos)", x = "", y = "") +
+  labs(title = "Artistas con más tiempo de reproducción\n(minutos)", x = "", y = "") +
   theme_minimal() +
   theme(
     panel.grid = element_blank(),

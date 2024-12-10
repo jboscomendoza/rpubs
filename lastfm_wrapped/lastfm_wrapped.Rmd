@@ -1,0 +1,569 @@
+---
+title: "Last.fm Wrapped"
+author: "Juan Bosco Mendoza Vega"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    theme: flatly
+    highlight: haddock
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Recientemente Spotify, el servicio de *streaming* musical compartió el **"Wrapped"** de sus usuarios, un resumen anual de su uso de la plataforma. Esta ha sido una iniciativa muy exitosa para Spotify, que genera mucho involucramiento y difusión, al grado que se ha convertido en un evento muy esperado por los usuarios de esta plataforma.
+
+Este año, 2024, los usuarios no han estado [particularmente contentos con su Wrapped por distintas razones](https://www.forbes.com/sites/conormurray/2024/12/04/spotify-users-slam-worst-wrapped-after-long-wait-and-lack-of-genre-album-statistics/). Para ser franco, sí me pareció más simple que en años anteriores, pero también es algo que no me sorprende tanto, [pues Spotify ha despedido a una proporción considerable de su personal durante el último año](https://techcrunch.com/2024/02/12/every-noise-shut-down-spotify-layoffs/).
+
+Pero, lo relevante para este artículo es que podemos replicar las estadísticas básicas que han aparecido en el Wrapped analizando datos obtenidos mediante consultas (*requests*) a la API (*Application Programming Interface*) de **[last.fm](https://last.fm)**, un servicio que se especializa en compilar estadísticas de escucha musical y con ellas generar una base de datos pública.
+
+Haremos este análisis con R, para poner en práctica las consultas a APIs usando el paquete **httr2** así distintas tareas de extracción, transformación y presentación de datos con los paquetes del **tidyverse**. En realidad, son los mismo resúmenes que siempre están disponibles en last.fm, pero es una oportunidad de hacer un análisis de datos divertido.
+
+Empezaremos instalando estos paquetes, con la mención que el análisis ha sido realizado con la versión 4.4.2 de R ("Pile of Leaves").
+
+### Paquetes necesarios
+
+Los paquetes necesarios son:
+
+* **httr2**: Permite hacer peticiones HTTP, particularmente útil para interactuar con APIs.
+* **tidyverse**: Una familia de paquetes con múltiples herramientas para manipular y visualizar datos.
+* **jsonlite**: No es indispensable para el análisis, pero en este artículo servirá para mostrar de una manera más legibles algunos datos. 
+
+Por supuesto, instalamos estamos paquetes a nuestra librería de R con la función **install.packages**.
+
+```{r, eval=FALSE}
+install.packages(c("tidyverse", "httr"))
+```
+
+Cargamos los paquetes a nuestra sesión con la función **library**.
+
+```{r}
+library(tidyverse)
+library(httr2)
+library(jsonlite)
+```
+
+### Preparación para el análisis
+
+Para poder hacer peticiones a last.fm necesitamos una API key, que podemos obtener en la siguiente liga, el proceso es muy sencillo y no tienen ningún costo:
+
+* https://www.last.fm/api
+
+Una vez que tenemos nuestra API key, la asignamos a una variable. Es muy importante que **no compartas tu key con nadie más**, por ello en este artículo no la verás mostrada.
+
+```{r, echo=FALSE}
+# Lectura de Api key en un archivo externo
+api_key <- readLines("secret.txt")
+```
+```{r, eval=FALSE}
+api_key <- "tu API key va aquí"
+```
+
+Para hacer peticiones a la API de last.fm partimos de una URL raíz, que se comparte para todas las peticiones. La asignamos a una variable **lastfm_root**.
+
+```{r}
+lastfm_root <- "http://ws.audioscrobbler.com/2.0/"
+```
+
+Los URL para hacer peticiones a la API de last.fm tienen la siguiente estructura:
+
+ * `[URL raiz][método][entidad:usuario/artista/canción/disco/etc.][API key][parámetros opcionales][formato json (opcional)]`
+ 
+ Por ejemplo:
+ * `"http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user=zegim&api_key=xxx&period=12month&limit=50&format=json"`
+ 
+ Mientras nuestras URL tengan una estructura similar, vamos por buen camino.
+
+Para este análisis usaré mi propia información de last.fm del último año, así que asignaré mi nombre de usuario a una variable, así como el periodo de tiempo sobre el que haremos el análisis. El periodo de tiempo, además de anual "12month", puede ser "overall", "7day", "1month", "3month" o "6month".
+
+También pondremos un límite al número de artistas y canciones que recuperaremos para este "Wrapped" y lo asignamos a un par de variables. He fijado estos límites en 50, pues creo que esta cantidad da una buena cantidad de información relevante para analizar, pero por supuesto que puedes cambiarlo.
+
+```{r}
+usuario <- "zegim"
+periodo <- "12month"
+limite_artistas  <- "50"
+limite_canciones <- "50"
+```
+
+Ya con esta preparación hecha, comencemos el análisis obteniendo los artistas más reproducidos del último año.
+
+### Artistas más reproducidos
+
+Para recuperar estos datos usaremos el método **"user.gettopartists"**, el cual asignamos a una variable.
+
+```{r}
+metodo_artistas <- "user.gettopartists"
+```
+
+Con esta variable y las que hemos definido en la preparación del análisis, generamos el URL de petición o *request*.
+
+```{r}
+request_artistas <- paste0(
+  lastfm_root,
+  "?method=", metodo_artistas,
+  "&user=", usuario,
+  "&api_key=", api_key,
+  "&period=", periodo,
+  "&limit=", limite_artistas,
+  "&format=json"
+)
+```
+
+El resultado debe verse parecido a este:
+
+```{r}
+"http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user=zegim&api_key=xxx&period=12month&limit=50&format=json"
+```
+
+Con esta URL lista, usaremos tres funciones del paquete **httr2* para hacer la petición a la API last.fm y obtener una respuesta con contenido en [formato json](https://developer.mozilla.org/en-US/docs/Learn/JavaScript/Objects/JSON).
+
+* **request**: Para construir la petición a partir de una URL, como cadena de texto.
+* **req_perform**: Para ejecutar la petición y obtener una respuesta de la API ([más información sobre las respuestas aquí](https://developer.mozilla.org/en-US/docs/Web/API/Response)).
+* **resp_body_json**: Extrae el contenido de la respuesta en formato json. R tratará ese contenido como una lista, pero usaremos funciones del paquete **jsonlite** para una mejor presentación visual.
+
+Ejecutamos estas tres funciones en secuencia, usando pipes (**%>%**) y asignamos el resultado a la variable **contenido_artistas**.
+
+```{r}
+contenido_artistas <- 
+  request(request_artistas) %>% 
+  req_perform() %>% 
+  resp_body_json()
+```
+
+Si todo ha salido bien, obtenemos una lista con una estructura un tanto compleja, en la que se encuentra bastante información de los cincuenta artistas que hemos pedido.
+
+En caso de que algo haya marchado mal, nos aparecerá un error, generalmente un error 400, que indica que no se ha encontrado el recurso solicitado. De ser así, debemos verificar que el URL de la petición tenga la estructura y parámetros correctos, que nuestra API key sea correcta, y que el usuario del que solicitamos datos sea uno válido.
+
+Como nuestra petición ha tenido éxito, veamos su primer elemento relevante:
+
+```{r}
+jsonlite::toJSON(contenido_artistas$topartists$artist[[1]]) %>% 
+  jsonlite::prettify()
+```
+
+Vamos a extraer dos elementos de cada artista, su nombre (*name*) y el número de reproducciones que ha tenido (*playcount*). 
+
+Haremos esto usando la función **map_df** del paquete **purrr**, parte del **tidyverse**, que está diseñado para trabajar con programación funcional lo cual es muy útil para trabajar con listas. Esta función es parte de la familia **map**, que aplica una función a todos lo elementos de una lista.
+
+Extraemos los dos elementos arriba mencionados y lo asignamos a un data frame con la función **tibble** del paquete del mismo nombre, también parte del **tidyverse**.
+
+```{r}
+df_artistas <- 
+  map_df(contenido_artistas$topartists$artist, function(x_artist) {
+  tibble(
+    "artista" = x_artist[["name"]],
+    "reproducciones" = as.numeric(x_artist[["playcount"]]))
+})
+```
+
+El resultado será un data frame como el siguiente:
+
+```{r}
+df_artistas
+```
+
+Sí, definitivamente esto fue lo que más escuché durante el último año... aunque no esperaba que hubiera tanta diferencia entre los dos primeros artistas y los demás.
+
+Con esto ya tenemos nuestra listado de artistas con más reproducciones en el último año, así que podemos continuar obteniendo las canciones más reproducidas.
+
+### Canciones más reproducidas
+
+El procedimiento para obtener las canciones más reproducidas es básicamente el mismo que para obtener los artistas más reproducidos. Sólo necesitamos cambiar el método de nuestra petición de **"user.gettopartists"** a **"user.gettoptracks"**.
+
+```{r}
+metodo_canciones <- "user.gettoptracks"
+```
+
+Generamos el URL de petición.
+
+```{r}
+request_canciones <- paste0(
+  lastfm_root,
+  "?method=", metodo_canciones,
+  "&user=", usuario,
+  "&api_key=", api_key,
+  "&period=", periodo,
+  "&limit=", limite_canciones,
+  "&format=json"
+)
+```
+
+Hacemos la petición usando las funciones **request**, **req_perform** y **resp_body_json** en secuencia.
+
+```{r}
+contenido_canciones <- 
+  request(request_canciones) %>% 
+  req_perform() %>% 
+  resp_body_json()
+```
+
+Y,si todo ha salido bien, obtendremos una lista con la información de cincuenta canciones.
+
+Veamos la primera canción:
+
+```{r}
+jsonlite::toJSON(contenido_canciones$toptracks$track[[1]]) %>% 
+  jsonlite::prettify()
+```
+
+En este caso, para cada canción vamos a extraer el nombre (*name*), artista(*artist*), número de reproducciones (*playcount*) y su duración en segundos (*duration*). Con estos datos generaremos un data frame usando de nuevo las funciones **tibble** y **map_df**.
+
+En el proceso, aplicamos la función **as.numeric** a los datos de reproducciones y duración, para asegurar que tendremos datos numéricos válidos.
+
+```{r}
+df_canciones <- 
+  map_df(contenido_canciones$toptracks$track, function(x){
+    tibble(
+      "cancion" = x[["name"]],
+      "artista" = x[["artist"]][["name"]],
+      "reproducciones" = as.numeric(x[["playcount"]]),
+      "duracion" = as.numeric(x[["duration"]])
+    )
+  })
+```
+
+Veamos nuestro resultado:
+
+```{r}
+df_canciones
+```
+
+Con eso ya tenemos nuestra lista de canciones más escuchadas del último año.
+
+Vamos a provechar que tenemos la duración de cada canción para hacer una estimación de qué artista tuvo la mayor cantidad de tiempo de reproducción durante el último año. Es posible tener artistas cuyas canciones se escuchan muchas veces, pero son muy cortas, por lo que en realidad no son tan escuchados como otros artistas con canciones más largas, así que vamos a explorarlo.
+
+# Artistas con más tiempo reproducido
+
+Como nos dimos cuenta al darle un vistazo al data frame **df_canciones**, tenemos canciones con duración **0**, debido a que last.fm no tiene esa información entre sus metadatos. Para no perder por completo la información de esas canciones, vamos a hacer un reemplazo de este valor cero por la mediana de duración entre todas las canciones de nuestro data frame.
+
+Hacemos este reemplazo con la función **mutate** del paquete **dplyr** del **tidyverse**, dentro de la cual usamos la función **ifelse**; primero para reemplazar los valores **0** por **NA**, y después ese **NA**, identificados por la función **is.na**, por la mediana de duraciones, calculada con la función **median**. 
+
+El paso intermedio de **0** a **NA** evita que la mediana se encuentre muy sesgada precisamente por la presencia de valores iguales a cero.
+
+```{r}
+df_canciones <- 
+  df_canciones %>% 
+  mutate(
+    duracion = ifelse(duracion == 0, NA, duracion),
+    duracion = ifelse(is.na(duracion), median(duracion, na.rm = TRUE), duracion)
+  )
+```
+
+Nuestro resultado es el siguiente:
+
+```{r}
+df_canciones
+```
+
+Hemos obtenido una duración de 216 segundos, poco más de tres minutos y medio, lo cual suena razonable para una canción. Con esto, podemos obtener los artistas con más tiempo de reproducción
+
+Vamos a obtener el **tiempo** de reproducción al multiplicar el valor de **reproducciones** por el valor de **duración** dentro de una llamada a **mutate**. 
+
+Después vamos a agrupar los datos por artista usando la función **group_by** de **dplyr** del **tidyverse**. Con los datos agrupados, hacemos la suma de **tiempo del artista**, usando la función **sum**. 
+
+Desagrupamos los datos con **ungroup**, los ordenamos de mayor a menor usando las funciones **arrange** y **desc**, todas del paquete **dplyr**.
+
+Por último, dentro de otro **mutate**, creamos las columnas **minutos** y **horas**, dividiendo el **tiempo**, que representa segundos, entre 60 y 3600, respectivamente.
+
+Asignamos el resultado a la variable **df_tiempo**.
+
+```{r}
+df_tiempo <-
+  df_canciones %>%
+  mutate(tiempo = reproducciones * duracion) %>%
+  group_by(artista) %>%
+  summarise(tiempo = sum(tiempo)) %>%
+  ungroup() %>%
+  arrange(desc(tiempo)) %>%
+  mutate(
+    minutos = tiempo / 60,
+    horas = tiempo / 3600
+  )
+```
+
+Veamos nuestro resultado:
+
+```{r}
+df_tiempo
+```
+
+Comprobamos que, efectivamente, tenemos una lista de artistas diferente a la que se obtiene tomando como criterio el número de reproducciones. Bicep tiene más tiempo de escucha que Kendrick Lamar y Coheed and Cambria, mientras que artistas como Burial y R Plus se hacen presentes cuando antes no lo estaban. Por supuesto, es una medida un tanto imprecisa, pero a mi me suena razonable, conociendo mis hábitos de escucha.
+
+Finalmente, vamos a obtener las principales *tags* de los artistas con más reproducciones del último año.
+
+# Tags principales
+
+Los *tags* son etiquetas que los usuarios de last.fm usan para describir a un artista. Generalmente son usadas para identificar los géneros del artista, pero también puede describir su país de origen y años en los que ha estado activo, entre otras cosas.
+
+Comenzaremos por extraer a nuestros artistas más escuchados desde el data frame **df_artistas** que hemos generado anteriormente.
+
+```{r}
+artistas <- df_artistas$artista
+```
+
+Si quisiéramos obtener los *tags* de un único artista, el procedimiento sería muy parecido a lo que hemos hecho en los dos casos anteriores.
+
+Primero, asignamos a una variable el método a usar, en este caso **"artist.getTopTags"**.
+
+Como ahora vamos a recuperar información de un artista y no de un usuario, asignamos a una variable el nombre del artista de interés; sólo debemos tener cuidado de reemplazar los espacios en su nombre por símbolos *+*, para que sea una petición válida a la API de last.fm.
+
+```{r}
+metodo_tags <- "artist.getTopTags"
+artista <- "Kendrick+Lamar"
+```
+
+Generamos nuestro URL de petición.
+
+```{r}
+request_tags <- paste0(
+  lastfm_root,
+  "?method=", metodo_tags,
+  "&artist=", artista,
+  "&api_key=", api_key,
+  "&format=json"
+)
+```
+
+Y hacemos la petición.
+
+```{r}
+contenido_tags <- 
+  request(request_tags) %>% 
+  req_perform() %>% 
+  resp_body_json()
+```
+
+El primer elemento relevante de nuestro resultado es el siguiente.
+
+```{r}
+jsonlite::toJSON(contenido_tags$toptags$tag[[1]]) %>% 
+  jsonlite::prettify()
+```
+
+Necesitamos hacer esto para cincuenta artistas, por lo que recurriremos a un bucle (*loop*). Como estamos usando R, vamos a aprovechar de nuevo el paquete **purrr** del **tidyverse** para aplicar cómodamente una función a todos los elementos de una lista.
+
+Para ello, primero definiremos una función que realice todo el procedimiento anterior.
+
+Esta función tendrá un argumento **limite**, pues cada artista puede tener una cantidad muy grande de *tags*, ya que estos son agregados por usuarios de last.fm y pueden ser cualquier cosa. Fijamos su valor por defecto en quince, para tener cierto balance entre cantidad y calidad de los *tags*.
+
+También usaremos la función **str_replace_all** del paquete **stringr** del **tidyverse** para reemplazar los espacios en los nombres de los artistas por símbolos **+**.
+
+Si todo marcha bien, la función nos devolverá un data frame con dos columnas, una con el nombre del artista y otro con el nombre de los *tags*.
+
+```{r}
+obtener_tags <- function(artista, api_key, limite=15) {
+  metodo_tags <- "artist.getTopTags"
+  request_tags <- paste0(
+    lastfm_root,
+    "?method=", metodo_tags,
+    #
+    "&artist=", str_replace_all(artista, " ", "+"),
+    "&api_key=", api_key,
+    "&format=json"
+  )
+
+  contenido_tags <- 
+    request(request_tags) %>% 
+    req_perform() %>% 
+    resp_body_json()
+  
+  # Verifica si se ha obtenido una respuesta válida, si no es así, devuelve NULL
+  if (is.null(contenido_tags[["error"]])) {
+    map_df(contenido_tags$toptags$tag[1:limite], function(tag) {
+      tibble("artista" = artista, "tag" = tag[["name"]])
+    })
+  } else {
+    NULL
+  }
+}
+```
+
+Probemos nuestra función con Kendrick Lamar.
+
+```{r}
+obtener_tags("Kendrick Lamar", api_key)
+```
+
+Todo marcha bien, aunque ya anticipamos que tendremos que limpiar un poco los datos que obtendremos, para reducir duplicados y otras inconsistencias.
+
+Como anticipamos, usaremos **map_df** para obtener los *tags* de todos nuestros artistas. He puesto la función **Sys.sleep** dentro de **map_df** para introducir una pequeña pausa de cortesía entre peticiones a la API de last.fm. Lo anterior no es estrictamente necesario, este análisis difícilmente superará el límite de peticiones de last.fm, pero me gusta ser considerado.
+
+```{r}
+df_tags <- map_df(artistas, function(artista) {
+  Sys.sleep(0.01)
+  obtener_tags(artista, api_key)
+})
+```
+
+Este es nuestro resultado:
+
+```{r}
+df_tags
+```
+
+Limpiamos un poco los nombres de los tags con las funciones **str_to_lower**, para poner todo en minúsculas, y **str_replace_all**, para cambiar los guiones por espacios, ambas son funciones del paquete **stringr** de **tidyverse**. Además, algo que se por darle un vistazo por mi cuenta a los resultados, es el uso de los *tags* **electronic** y **electronica**, que son equivalentes, por lo que también los consolidaremos.
+
+De una vez, haremos el conteo de tags con la función **count** del paquete **dplyr** y asignamos el resultados a la variable **df_conteo_tags**. Quitamos del conteo las etiquetas con valor **NA** y **seen live**, ya que está última es usada por los usuarios de last.fm para llevar un registro de los artistas que han visto en vivo y no es relevante para nuestro análisis.
+
+
+```{r}
+df_conteo_tags <- 
+  df_tags %>%  
+  mutate(
+    tag = str_to_lower(tag),
+    tag = str_replace_all(tag, "-", " ")
+    tag = str_replace_all(tag, "electronica", "electronic")
+  ) %>% 
+  count(tag, sort = TRUE) %>% 
+  filter(!tag %in% c(NA, "seen live")) 
+```
+
+Vemos nuestro resultado.
+
+```{r}
+df_conteo_tags
+```
+
+Definitivamente me gusta la música electrónica.
+
+Para terminar, vamos a generar gráficas para visualizar nuestros resultados usando el paquete **ggplot2** del **tidyverse**.
+
+### Gráficas
+
+No nos detendremos mucho en los detalles para generar los gráficos, pero en todos los casos limitaremos el número de datos para visualizar a diez renglones de los data frames usando la función **top_n** de **dplyr** y ordenamos estos datos de menor a mayor usando la función **reorder**.
+
+El gráfico para los artistas más reproducidos es el siguiente.
+
+```{r}
+df_artistas %>%
+  top_n(10, wt = reproducciones) %>%
+  mutate(artista = reorder(artista, reproducciones, decreasing = FALSE)) %>%
+  ggplot() +
+  aes(artista, reproducciones) +
+  coord_flip() +
+  geom_col(fill = "#1a759f") +
+  geom_text(
+    aes(label = reproducciones),
+    hjust = 1.5,
+    color = "#ffffff",
+  ) +
+  geom_text(
+    aes(label = artista, y = 5),
+    hjust = "left",
+    color = "#ffffff"
+  ) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(title = "Artistas más reproducidos", x = "", y = "") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank()
+  )
+```
+
+Para el gráfico que muestra las canciones más escuchadas, uniremos el nombre de la canción con el nombre del artista usando la función **paste0**, de modo que tengamos ambos datos visibles.
+
+```{r}
+df_canciones %>%
+  top_n(10, wt = reproducciones) %>%
+  mutate(cancion = paste0(cancion, " [", artista, "]")) %>%
+  mutate(cancion = reorder(cancion, reproducciones, decreasing = FALSE)) %>%
+  ggplot() +
+  aes(cancion, reproducciones) +
+  coord_flip() +
+  geom_col(fill = "#55a630") +
+  geom_text(
+    aes(label = reproducciones),
+    hjust = 1.5,
+    color = "#ffffff",
+  ) +
+  geom_text(
+    aes(label = cancion, y = 0.5),
+    hjust = "left",
+    color = "#ffffff"
+  ) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(title = "Canciones más reproducidas", x = "", y = "") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank()
+  )
+```
+
+Para el gráfico que muestra el tiempo escuchado por artista, redondearemos el número de minutos usando la función **round** para mejorar la presentación de los datos.
+
+```{r}
+df_tiempo %>%
+  mutate(
+    artista = reorder(artista, tiempo, decreasing = FALSE),
+    minutos = round(minutos)
+    ) %>%
+  top_n(10, wt = tiempo) %>%
+  ggplot() +
+  aes(artista, round(minutos)) +
+  coord_flip() +
+  geom_col(fill = "#b5838d") +
+  geom_text(
+    aes(label = minutos),
+    hjust = "right",
+    nudge_y = -3,
+    color = "#ffffff",
+  ) +
+  geom_text(
+    aes(label = artista, y = 3),
+    hjust = "left",
+    color = "#ffffff"
+  ) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(title = "Artistas con más tiempo de reproducción\n(minutos)", x = "", y = "") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank()
+  )
+```
+
+Finalmente, el gráfico con el conteo de los tags no requiere mayor procesamiento adicional.
+
+```{r}
+df_conteo_tags %>%
+  top_n(10, wt = n) %>%
+  mutate(tag = reorder(tag, n, decreasing = FALSE)) %>%
+  ggplot() +
+  aes(tag, n) +
+  coord_flip() +
+  geom_col(fill = "#967aa1") +
+  geom_text(
+    aes(label = n),
+    hjust = 1.5,
+    color = "#ffffff",
+  ) +
+  geom_text(
+    aes(label = tag, y = .2),
+    hjust = "left",
+    color = "#ffffff",
+  ) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(title = "Tags principales", x = "", y = "") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank()
+  )
+```
+
+### Conclusión
+
+Eso fue divertido, con todo y que quedó pendiente hacer el conteo de los discos más escuchados durante el año. 
+
+Sin embargo en el proceso practicamos hacer consultas a APIs usando R, así como tareas comunes de procesamiento de datos. No nos metimos muy a fondo a revisar cómo trabajar con json en R o cómo generar gráficos bastante personalizados con ggplot2, pero eso puede ser motivo de otro artículo.
+
+Lo que seguramente sí será motivo de otro artículo es llevar todo el análisis anterior a una app de **shiny** para así poder generar estos "Wrapped" para cualquier usuario de last.fm.
+
+Pero eso, será después.
+
+Mientras puedes encontrar todo el código de este análisis en Github, incluido el Markdown de este artículo:
+
+* https://github.com/jboscomendoza/rpubs/tree/master/lastfm_wrapped
